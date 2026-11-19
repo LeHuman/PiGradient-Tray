@@ -5,6 +5,7 @@
 <!-- LANGUAGES: Rust -->
 <!-- TECHNOLOGY: egui, eframe, Win32, tray-icon, Tokio, reqwest -->
 <!-- COLOR: #111318, #2563EB -->
+<!-- PROJECT: PiGradient -->
 
 <!-- STATUS -->
 **Prototype**
