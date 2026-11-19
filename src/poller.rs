@@ -128,6 +128,21 @@ impl Default for TelemetrySnapshot {
 }
 
 impl TelemetrySnapshot {
+    /// Seconds since the device was last heard from, aged forward by the time
+    /// elapsed since this snapshot arrived.
+    ///
+    /// The payload's `last_seen_seconds_ago` is frozen at the moment the
+    /// gateway produced it, so an offline gateway would otherwise report the
+    /// same "last seen" value forever and look fresher than it is.
+    pub fn effective_last_seen_seconds(&self) -> Option<i64> {
+        let live = self.live.as_ref()?;
+        if live.last_seen_seconds_ago < 0 {
+            return None;
+        }
+        let since_ms = (Utc::now().timestamp_millis() - self.last_updated_at_ms).max(0);
+        Some(live.last_seen_seconds_ago + since_ms / 1000)
+    }
+
     pub fn has_valid_telemetry(&self) -> bool {
         if self.connection_state == "unconfigured" || self.connection_state == "offline" {
             return false;
@@ -176,7 +191,7 @@ impl TelemetrySnapshot {
                     Some(live.processed.temp_f),
                     Some(live.processed.temp_c),
                     Some(live.processed.humidity),
-                    Some(live.last_seen_seconds_ago),
+                    self.effective_last_seen_seconds(),
                     settings,
                 )
             } else {
@@ -188,7 +203,7 @@ impl TelemetrySnapshot {
                     None,
                     None,
                     None,
-                    Some(live.last_seen_seconds_ago),
+                    self.effective_last_seen_seconds(),
                     settings,
                 )
             }
@@ -294,11 +309,32 @@ impl SharedAppState {
     }
 
     pub fn read_settings(&self) -> AppSettings {
-        self.settings.read().map(|g| g.clone()).unwrap_or_default()
+        // Recover from poisoning instead of silently falling back to defaults:
+        // a poisoned lock means a thread panicked while writing, not that the
+        // stored settings are invalid.
+        self.settings
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     pub fn read_snapshot(&self) -> TelemetrySnapshot {
-        self.snapshot.read().map(|g| g.clone()).unwrap_or_default()
+        self.snapshot
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn write_settings(&self) -> std::sync::RwLockWriteGuard<'_, AppSettings> {
+        self.settings
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn write_snapshot(&self) -> std::sync::RwLockWriteGuard<'_, TelemetrySnapshot> {
+        self.snapshot
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn set_flyout_visible(&self, visible: bool) {
@@ -333,10 +369,20 @@ async fn fetch_history_if_stale(state: &SharedAppState, base_url: &str) {
         && resp.status().is_success()
         && let Ok(points) = resp.json::<Vec<HistoryPoint>>().await
     {
-        if let Ok(mut snap) = state.snapshot.write() {
+        {
+            let mut snap = state.write_snapshot();
             snap.history = points;
         }
         state.last_history_fetch_ms.store(now_ms, Ordering::Relaxed);
+    }
+}
+
+/// Advances the reconnect backoff one step: initial -> medium -> max.
+fn next_backoff(current: u64) -> u64 {
+    if current == BACKOFF_INITIAL_SECS {
+        BACKOFF_MED_SECS
+    } else {
+        BACKOFF_MAX_SECS
     }
 }
 
@@ -353,7 +399,8 @@ pub fn spawn_poller(
             let base_url = settings.gateway_url.trim().trim_end_matches('/').to_string();
 
             if base_url.is_empty() {
-                if let Ok(mut snap) = state.snapshot.write() {
+                {
+            let mut snap = state.write_snapshot();
                     snap.connection_state = "unconfigured".to_string();
                     snap.live = None;
                     snap.widget = None;
@@ -375,6 +422,7 @@ pub fn spawn_poller(
                         backoff_secs = BACKOFF_INITIAL_SECS;
                         let mut stream = resp.bytes_stream();
                         let mut buffer = String::new();
+                        let mut dropped_stream = false;
 
                         while state.flyout_visible.load(Ordering::SeqCst) {
                             tokio::select! {
@@ -398,7 +446,8 @@ pub fn spawn_poller(
                                                 for line in event_block.lines() {
                                                     if let Some(json_str) = line.strip_prefix("data:")
                                                         && let Ok(live) = serde_json::from_str::<LivePayload>(json_str.trim()) {
-                                                            if let Ok(mut snap) = state.snapshot.write() {
+                                                            {
+            let mut snap = state.write_snapshot();
                                                                 snap.connection_state = live.status.clone();
                                                                 snap.last_error = live.error_message.clone();
                                                                 snap.last_updated_at_ms = Utc::now().timestamp_millis();
@@ -409,39 +458,54 @@ pub fn spawn_poller(
                                                 }
                                             }
                                         }
-                                        _ => break,
+                                        _ => {
+                                            dropped_stream = true;
+                                            break;
+                                        },
                                     }
                                 }
                             }
                         }
+
+                        // The stream ended or was cut while the flyout is still
+                        // open. Without a delay here a gateway that accepts the
+                        // connection then drops it would spin this loop.
+                        if dropped_stream && state.flyout_visible.load(Ordering::SeqCst) {
+                            let sleep_dur = Duration::from_secs(backoff_secs);
+                            backoff_secs = next_backoff(backoff_secs);
+                            tokio::select! {
+                                _ = tokio::time::sleep(sleep_dur) => {}
+                                _ = state.wake_notify.notified() => {}
+                            }
+                        }
                     }
                     Err(e) => {
-                        if let Ok(mut snap) = state.snapshot.write() {
+                        {
+            let mut snap = state.write_snapshot();
                             snap.connection_state = "offline".to_string();
                             snap.last_error = Some(format!("Gateway unreachable: {e}"));
                         }
                         ctx.request_repaint();
 
                         let sleep_dur = Duration::from_secs(backoff_secs);
-                        backoff_secs = if backoff_secs == BACKOFF_INITIAL_SECS {
-                            BACKOFF_MED_SECS
-                        } else {
-                            BACKOFF_MAX_SECS
-                        };
+                        backoff_secs = next_backoff(backoff_secs);
                         tokio::select! {
                             _ = tokio::time::sleep(sleep_dur) => {}
                             _ = state.wake_notify.notified() => {}
                         }
                     }
                     Ok(resp) => {
-                        if let Ok(mut snap) = state.snapshot.write() {
+                        {
+            let mut snap = state.write_snapshot();
                             snap.connection_state = "offline".to_string();
                             snap.last_error = Some(format!("Gateway HTTP {}", resp.status()));
                         }
                         ctx.request_repaint();
 
+                        let sleep_dur = Duration::from_secs(backoff_secs);
+                        backoff_secs = next_backoff(backoff_secs);
                         tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_secs(backoff_secs)) => {}
+                            _ = tokio::time::sleep(sleep_dur) => {}
                             _ = state.wake_notify.notified() => {}
                         }
                     }
@@ -453,7 +517,8 @@ pub fn spawn_poller(
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(widget) = resp.json::<WidgetPayload>().await {
                             backoff_secs = BACKOFF_INITIAL_SECS;
-                            if let Ok(mut snap) = state.snapshot.write() {
+                            {
+            let mut snap = state.write_snapshot();
                                 snap.connection_state = "online".to_string();
                                 snap.widget = Some(widget);
                                 snap.last_error = None;
@@ -462,13 +527,15 @@ pub fn spawn_poller(
                         }
                     }
                     Ok(resp) => {
-                        if let Ok(mut snap) = state.snapshot.write() {
+                        {
+            let mut snap = state.write_snapshot();
                             snap.connection_state = "offline".to_string();
                             snap.last_error = Some(format!("Gateway HTTP {}", resp.status()));
                         }
                     }
                     Err(e) => {
-                        if let Ok(mut snap) = state.snapshot.write() {
+                        {
+            let mut snap = state.write_snapshot();
                             snap.connection_state = "offline".to_string();
                             snap.last_error = Some(format!("Gateway unreachable: {e}"));
                         }
@@ -493,6 +560,45 @@ pub fn spawn_poller(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ages_last_seen_forward_while_offline() {
+        let now_ms = Utc::now().timestamp_millis();
+        let snap = TelemetrySnapshot {
+            connection_state: "offline".to_string(),
+            last_updated_at_ms: now_ms - 30_000,
+            live: Some(LivePayload {
+                timestamp: 1700000000,
+                last_seen_seconds_ago: 5,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let seen = snap
+            .effective_last_seen_seconds()
+            .expect("valid last_seen should report a value");
+        // 5s reported at payload time plus the 30s since it arrived.
+        assert!((34..=36).contains(&seen), "unexpected last_seen {seen}");
+    }
+
+    #[test]
+    fn reports_no_last_seen_when_device_never_checked_in() {
+        let snap = TelemetrySnapshot {
+            live: Some(LivePayload {
+                last_seen_seconds_ago: -1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(snap.effective_last_seen_seconds(), None);
+    }
+
+    #[test]
+    fn backoff_steps_through_each_stage_and_caps() {
+        assert_eq!(next_backoff(BACKOFF_INITIAL_SECS), BACKOFF_MED_SECS);
+        assert_eq!(next_backoff(BACKOFF_MED_SECS), BACKOFF_MAX_SECS);
+        assert_eq!(next_backoff(BACKOFF_MAX_SECS), BACKOFF_MAX_SECS);
+    }
 
     #[test]
     fn handles_partial_gateway_payload_without_crashing() {
