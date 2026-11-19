@@ -108,12 +108,12 @@ pub fn normalize_gateway_url(raw: &str) -> Result<String, String> {
 
 #[cfg(windows)]
 pub fn set_windows_startup(enabled: bool) -> Result<(), String> {
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
     use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
-        KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
+        HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
+        RegCreateKeyExW, RegDeleteValueW, RegSetValueExW,
     };
+    use windows::core::PCWSTR;
 
     let subkey: Vec<u16> = crate::constants::STARTUP_REG_SUBKEY
         .encode_utf16()

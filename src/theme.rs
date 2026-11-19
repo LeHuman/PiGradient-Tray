@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::constants::{
-    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, CONTRAST_LIFT_PURPLE, CO2_GAUGE_MAX, CO2_GAUGE_MIN,
+    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, CO2_GAUGE_MAX, CO2_GAUGE_MIN, CONTRAST_LIFT_PURPLE,
     ERROR_RED, NEUTRAL_SLATE_COLOR, NOX_ELEVATED, NOX_HIGH, NOX_MODERATE, STATUS_AMBER,
     STATUS_GREEN, STATUS_ORANGE, STATUS_RED, STATUS_SKY, SURFACE_TILE, TEXT_PRIMARY,
     TEXT_SECONDARY, TVOC_ELEVATED, TVOC_HIGH, TVOC_MODERATE, WCAG_AA_MIN_LUMINANCE,
@@ -31,14 +31,14 @@ pub fn active_tint_bg() -> Color32 {
 
 pub fn parse_color32(hex: &str) -> Color32 {
     let cleaned = hex.trim().trim_start_matches('#');
-    if cleaned.len() == 6 {
-        if let (Ok(r), Ok(g), Ok(b)) = (
+    if cleaned.len() == 6
+        && let (Ok(r), Ok(g), Ok(b)) = (
             u8::from_str_radix(&cleaned[0..2], 16),
             u8::from_str_radix(&cleaned[2..4], 16),
             u8::from_str_radix(&cleaned[4..6], 16),
-        ) {
-            return Color32::from_rgb(r, g, b);
-        }
+        )
+    {
+        return Color32::from_rgb(r, g, b);
     }
     NEUTRAL_SLATE_COLOR
 }
@@ -218,7 +218,8 @@ pub fn configure_fonts_and_style(ctx: &egui::Context) {
         visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY);
 
         visuals.widgets.hovered.bg_fill = Color32::from_rgb(33, 38, 48);
-        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 55));
+        visuals.widgets.hovered.bg_stroke =
+            Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 55));
         visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
 
         visuals.widgets.active.bg_fill = ACCENT_PRIMARY;

@@ -10,7 +10,9 @@ use eframe::egui::{
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::config::{normalize_gateway_url, save_settings_to_disk, set_windows_startup, AppSettings};
+use crate::config::{
+    AppSettings, normalize_gateway_url, save_settings_to_disk, set_windows_startup,
+};
 use crate::constants::{
     ACCENT_PRIMARY, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT, FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH,
     FOCUS_LOSS_GRACE_MS, SURFACE_CARD, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
@@ -19,9 +21,7 @@ use crate::poller::{SharedAppState, TelemetrySnapshot};
 use crate::theme::{
     self, border_card, border_subtle, format_relative_time, hover_overlay, parse_color32,
 };
-use crate::tray::{
-    compute_flyout_logical_pos, work_area_for_point, TrayAction, TrayController,
-};
+use crate::tray::{TrayAction, TrayController, compute_flyout_logical_pos, work_area_for_point};
 
 use icons::draw_wifi_off_icon;
 use settings::SettingsFormState;
@@ -158,14 +158,14 @@ impl PiGradientApp {
                 snap.history.clear();
                 snap.last_error = None;
             }
-        } else if prev_url != next.gateway_url {
-            if let Ok(mut snap) = self.state.snapshot.write() {
-                snap.connection_state = "connecting".to_string();
-                snap.live = None;
-                snap.widget = None;
-                snap.history.clear();
-                snap.last_error = None;
-            }
+        } else if prev_url != next.gateway_url
+            && let Ok(mut snap) = self.state.snapshot.write()
+        {
+            snap.connection_state = "connecting".to_string();
+            snap.live = None;
+            snap.widget = None;
+            snap.history.clear();
+            snap.last_error = None;
         }
         self.state.trigger_refresh();
         self.sync_tray_icon();
@@ -220,22 +220,20 @@ impl PiGradientApp {
         show_setup_prompt: bool,
         show_offline_prompt: bool,
     ) {
-        Frame::new()
-            .inner_margin(Margin::same(12))
-            .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 24.0);
-                ui.spacing_mut().item_spacing = Vec2::new(8.0, 10.0);
+        Frame::new().inner_margin(Margin::same(12)).show(ui, |ui| {
+            ui.set_width(FLYOUT_WIDTH - 24.0);
+            ui.spacing_mut().item_spacing = Vec2::new(8.0, 10.0);
 
-                if show_setup_prompt {
-                    self.render_setup_banner(ui);
-                } else if show_offline_prompt {
-                    self.render_offline_banner(ui, snapshot, settings);
-                }
+            if show_setup_prompt {
+                self.render_setup_banner(ui);
+            } else if show_offline_prompt {
+                self.render_offline_banner(ui, snapshot, settings);
+            }
 
-                render_kpi_grid(ui, snapshot, settings, valid_telemetry);
-                self.render_sparkline_card(ui, &snapshot.history, valid_telemetry);
-                self.render_footer(ui, snapshot, settings, valid_telemetry);
-            });
+            render_kpi_grid(ui, snapshot, settings, valid_telemetry);
+            self.render_sparkline_card(ui, &snapshot.history, valid_telemetry);
+            self.render_footer(ui, snapshot, settings, valid_telemetry);
+        });
     }
 
     fn render_setup_banner(&mut self, ui: &mut egui::Ui) {
@@ -300,8 +298,7 @@ impl PiGradientApp {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-                    let (icon_rect, _) =
-                        ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
+                    let (icon_rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
                     draw_wifi_off_icon(ui.painter(), icon_rect.center(), TEXT_MUTED);
 
                     ui.allocate_ui_with_layout(
@@ -340,9 +337,7 @@ impl PiGradientApp {
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let retry_btn = egui::Button::new(
-                            RichText::new("↻ Retry")
-                                .size(11.0)
-                                .color(TEXT_PRIMARY),
+                            RichText::new("↻ Retry").size(11.0).color(TEXT_PRIMARY),
                         )
                         .fill(hover_overlay())
                         .stroke(Stroke::NONE)
@@ -497,7 +492,11 @@ impl eframe::App for PiGradientApp {
             snapshot.connection_state == "unconfigured" || settings.gateway_url.trim().is_empty();
         let show_offline_prompt = !show_setup_prompt
             && (snapshot.connection_state == "offline"
-                || snapshot.live.as_ref().map(|l| l.timestamp <= 0).unwrap_or(false));
+                || snapshot
+                    .live
+                    .as_ref()
+                    .map(|l| l.timestamp <= 0)
+                    .unwrap_or(false));
 
         let card_response = egui::CentralPanel::default()
             .frame(egui::Frame::NONE)

@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
 
-use crate::config::{load_settings, AppSettings};
+use crate::config::{AppSettings, load_settings};
 use crate::constants::{
     BACKOFF_INITIAL_SECS, BACKOFF_MAX_SECS, BACKOFF_MED_SECS, HISTORY_INTERVAL_SECS,
     HISTORY_STALE_MS, HISTORY_WINDOW_SECS, HTTP_TIMEOUT_SECS, MAX_IDLE_POLL_SECONDS,
@@ -132,15 +132,16 @@ impl TelemetrySnapshot {
         if self.connection_state == "unconfigured" || self.connection_state == "offline" {
             return false;
         }
-        if let Some(live) = &self.live {
-            if live.timestamp > 0 {
-                return true;
-            }
+        if let Some(live) = &self.live
+            && live.timestamp > 0
+        {
+            return true;
         }
-        if let Some(widget) = &self.widget {
-            if widget.updated != "--" && widget.aqi_desc != "No Data" {
-                return true;
-            }
+        if let Some(widget) = &self.widget
+            && widget.updated != "--"
+            && widget.aqi_desc != "No Data"
+        {
+            return true;
         }
         false
     }
@@ -149,15 +150,16 @@ impl TelemetrySnapshot {
         if !self.has_valid_telemetry() {
             return NEUTRAL_SLATE_HEX.to_string();
         }
-        if let Some(live) = &self.live {
-            if live.timestamp > 0 && !live.processed.aqi_color.trim().is_empty() {
-                return live.processed.aqi_color.clone();
-            }
+        if let Some(live) = &self.live
+            && live.timestamp > 0
+            && !live.processed.aqi_color.trim().is_empty()
+        {
+            return live.processed.aqi_color.clone();
         }
-        if let Some(widget) = &self.widget {
-            if !widget.aqi_color.trim().is_empty() {
-                return widget.aqi_color.clone();
-            }
+        if let Some(widget) = &self.widget
+            && !widget.aqi_color.trim().is_empty()
+        {
+            return widget.aqi_color.clone();
         }
         NEUTRAL_SLATE_HEX.to_string()
     }
@@ -324,21 +326,25 @@ async fn fetch_history_if_stale(state: &SharedAppState, base_url: &str) {
 
     let now = Utc::now().timestamp();
     let start = now - HISTORY_WINDOW_SECS;
-    let history_url =
-        format!("{base_url}/api/v1/history?start={start}&end={now}&interval={HISTORY_INTERVAL_SECS}");
-    if let Ok(resp) = state.http.get(&history_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(points) = resp.json::<Vec<HistoryPoint>>().await {
-                if let Ok(mut snap) = state.snapshot.write() {
-                    snap.history = points;
-                }
-                state.last_history_fetch_ms.store(now_ms, Ordering::Relaxed);
-            }
+    let history_url = format!(
+        "{base_url}/api/v1/history?start={start}&end={now}&interval={HISTORY_INTERVAL_SECS}"
+    );
+    if let Ok(resp) = state.http.get(&history_url).send().await
+        && resp.status().is_success()
+        && let Ok(points) = resp.json::<Vec<HistoryPoint>>().await
+    {
+        if let Ok(mut snap) = state.snapshot.write() {
+            snap.history = points;
         }
+        state.last_history_fetch_ms.store(now_ms, Ordering::Relaxed);
     }
 }
 
-pub fn spawn_poller(rt_handle: &tokio::runtime::Handle, state: Arc<SharedAppState>, ctx: egui::Context) {
+pub fn spawn_poller(
+    rt_handle: &tokio::runtime::Handle,
+    state: Arc<SharedAppState>,
+    ctx: egui::Context,
+) {
     rt_handle.spawn(async move {
         let mut backoff_secs = BACKOFF_INITIAL_SECS;
 
@@ -390,8 +396,8 @@ pub fn spawn_poller(rt_handle: &tokio::runtime::Handle, state: Arc<SharedAppStat
                                                 let event_block = buffer[..pos].to_string();
                                                 buffer.drain(..pos + 2);
                                                 for line in event_block.lines() {
-                                                    if let Some(json_str) = line.strip_prefix("data:") {
-                                                        if let Ok(live) = serde_json::from_str::<LivePayload>(json_str.trim()) {
+                                                    if let Some(json_str) = line.strip_prefix("data:")
+                                                        && let Ok(live) = serde_json::from_str::<LivePayload>(json_str.trim()) {
                                                             if let Ok(mut snap) = state.snapshot.write() {
                                                                 snap.connection_state = live.status.clone();
                                                                 snap.last_error = live.error_message.clone();
@@ -400,7 +406,6 @@ pub fn spawn_poller(rt_handle: &tokio::runtime::Handle, state: Arc<SharedAppStat
                                                             }
                                                             ctx.request_repaint();
                                                         }
-                                                    }
                                                 }
                                             }
                                         }

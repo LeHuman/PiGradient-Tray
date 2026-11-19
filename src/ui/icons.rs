@@ -37,15 +37,24 @@ pub(super) fn draw_external_link_icon(painter: &Painter, c: Pos2, color: Color32
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x - 1.0, c.y + 1.0), Pos2::new(c.x + 5.0, c.y - 5.0)],
+        [
+            Pos2::new(c.x - 1.0, c.y + 1.0),
+            Pos2::new(c.x + 5.0, c.y - 5.0),
+        ],
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x + 1.5, c.y - 5.0), Pos2::new(c.x + 5.0, c.y - 5.0)],
+        [
+            Pos2::new(c.x + 1.5, c.y - 5.0),
+            Pos2::new(c.x + 5.0, c.y - 5.0),
+        ],
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x + 5.0, c.y - 5.0), Pos2::new(c.x + 5.0, c.y - 1.5)],
+        [
+            Pos2::new(c.x + 5.0, c.y - 5.0),
+            Pos2::new(c.x + 5.0, c.y - 1.5),
+        ],
         s,
     );
 }
@@ -53,7 +62,10 @@ pub(super) fn draw_external_link_icon(painter: &Painter, c: Pos2, color: Color32
 pub(super) fn draw_pin_icon(painter: &Painter, c: Pos2, color: Color32, pinned: bool) {
     let s = Stroke::new(1.3, color);
     painter.line_segment(
-        [Pos2::new(c.x - 3.0, c.y - 4.5), Pos2::new(c.x + 3.0, c.y - 4.5)],
+        [
+            Pos2::new(c.x - 3.0, c.y - 4.5),
+            Pos2::new(c.x + 3.0, c.y - 4.5),
+        ],
         s,
     );
     painter.line_segment(
@@ -65,16 +77,19 @@ pub(super) fn draw_pin_icon(painter: &Painter, c: Pos2, color: Color32, pinned: 
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x - 4.5, c.y + 1.0), Pos2::new(c.x + 4.5, c.y + 1.0)],
+        [
+            Pos2::new(c.x - 4.5, c.y + 1.0),
+            Pos2::new(c.x + 4.5, c.y + 1.0),
+        ],
         s,
     );
-    painter.line_segment(
-        [Pos2::new(c.x, c.y + 1.0), Pos2::new(c.x, c.y + 5.5)],
-        s,
-    );
+    painter.line_segment([Pos2::new(c.x, c.y + 1.0), Pos2::new(c.x, c.y + 5.5)], s);
     if !pinned {
         painter.line_segment(
-            [Pos2::new(c.x - 5.0, c.y - 5.0), Pos2::new(c.x + 5.0, c.y + 5.0)],
+            [
+                Pos2::new(c.x - 5.0, c.y - 5.0),
+                Pos2::new(c.x + 5.0, c.y + 5.0),
+            ],
             s,
         );
     }
@@ -101,11 +116,17 @@ pub(super) fn draw_gear_icon(painter: &Painter, c: Pos2, color: Color32) {
 pub(super) fn draw_close_icon(painter: &Painter, c: Pos2, color: Color32) {
     let s = Stroke::new(1.4, color);
     painter.line_segment(
-        [Pos2::new(c.x - 4.0, c.y - 4.0), Pos2::new(c.x + 4.0, c.y + 4.0)],
+        [
+            Pos2::new(c.x - 4.0, c.y - 4.0),
+            Pos2::new(c.x + 4.0, c.y + 4.0),
+        ],
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x + 4.0, c.y - 4.0), Pos2::new(c.x - 4.0, c.y + 4.0)],
+        [
+            Pos2::new(c.x + 4.0, c.y - 4.0),
+            Pos2::new(c.x - 4.0, c.y + 4.0),
+        ],
         s,
     );
 }
@@ -114,15 +135,24 @@ pub(super) fn draw_wifi_off_icon(painter: &Painter, c: Pos2, color: Color32) {
     let s = Stroke::new(1.3, color);
     painter.circle_filled(Pos2::new(c.x, c.y + 3.5), 1.4, color);
     painter.line_segment(
-        [Pos2::new(c.x - 3.5, c.y + 0.5), Pos2::new(c.x + 3.5, c.y + 0.5)],
+        [
+            Pos2::new(c.x - 3.5, c.y + 0.5),
+            Pos2::new(c.x + 3.5, c.y + 0.5),
+        ],
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x - 5.5, c.y - 2.5), Pos2::new(c.x + 5.5, c.y - 2.5)],
+        [
+            Pos2::new(c.x - 5.5, c.y - 2.5),
+            Pos2::new(c.x + 5.5, c.y - 2.5),
+        ],
         s,
     );
     painter.line_segment(
-        [Pos2::new(c.x - 5.0, c.y - 5.0), Pos2::new(c.x + 5.0, c.y + 5.0)],
+        [
+            Pos2::new(c.x - 5.0, c.y - 5.0),
+            Pos2::new(c.x + 5.0, c.y + 5.0),
+        ],
         s,
     );
 }

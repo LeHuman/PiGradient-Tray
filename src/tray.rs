@@ -1,6 +1,8 @@
 use eframe::egui::{self, Pos2};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, MouseButton, MouseButtonState, Rect, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{
+    Icon, MouseButton, MouseButtonState, Rect, TrayIcon, TrayIconBuilder, TrayIconEvent,
+};
 
 use crate::config::AppSettings;
 use crate::constants::{
@@ -18,14 +20,14 @@ pub enum TrayAction {
 
 pub fn parse_hex_rgb(hex: &str) -> (u8, u8, u8) {
     let cleaned = hex.trim().trim_start_matches('#');
-    if cleaned.len() == 6 {
-        if let (Ok(r), Ok(g), Ok(b)) = (
+    if cleaned.len() == 6
+        && let (Ok(r), Ok(g), Ok(b)) = (
             u8::from_str_radix(&cleaned[0..2], 16),
             u8::from_str_radix(&cleaned[2..4], 16),
             u8::from_str_radix(&cleaned[4..6], 16),
-        ) {
-            return (r, g, b);
-        }
+        )
+    {
+        return (r, g, b);
     }
     (100, 116, 139) // Neutral slate #64748B
 }
@@ -79,17 +81,39 @@ pub fn render_badge_rgba(badge_hex: &str) -> Vec<u8> {
 
 fn glyph_5x7(ch: char) -> [u8; 7] {
     match ch {
-        '0' => [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
-        '1' => [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
-        '2' => [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111],
-        '3' => [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
-        '4' => [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
-        '5' => [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
-        '6' => [0b01110, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b01110],
-        '7' => [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
-        '8' => [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
-        '9' => [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110],
-        _ => [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000],
+        '0' => [
+            0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
+        ],
+        '1' => [
+            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ],
+        '2' => [
+            0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111,
+        ],
+        '3' => [
+            0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110,
+        ],
+        '4' => [
+            0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010,
+        ],
+        '5' => [
+            0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110,
+        ],
+        '6' => [
+            0b01110, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b01110,
+        ],
+        '7' => [
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000,
+        ],
+        '8' => [
+            0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110,
+        ],
+        '9' => [
+            0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110,
+        ],
+        _ => [
+            0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000,
+        ],
     }
 }
 
@@ -190,6 +214,7 @@ pub fn clamp_tooltip(text: &str) -> String {
     format!("{truncated}…")
 }
 
+#[allow(clippy::too_many_arguments)] // flat formatter for optional sensor fields
 pub fn format_tooltip_text(
     connection_state: &str,
     aqi: Option<f64>,
@@ -240,10 +265,8 @@ impl TrayController {
         action_tx: std::sync::mpsc::Sender<TrayAction>,
         egui_ctx: egui::Context,
     ) -> Result<Self, String> {
-        let toggle_item =
-            MenuItem::with_id("toggle_flyout", "Open / Hide Flyout", true, None);
-        let dashboard_item =
-            MenuItem::with_id("open_dashboard", "Open Web Dashboard", true, None);
+        let toggle_item = MenuItem::with_id("toggle_flyout", "Open / Hide Flyout", true, None);
+        let dashboard_item = MenuItem::with_id("open_dashboard", "Open Web Dashboard", true, None);
         let settings_item = MenuItem::with_id("open_settings", "Settings...", true, None);
         let sep = PredefinedMenuItem::separator();
         let quit_item = MenuItem::with_id("quit", "Quit PiGradient", true, None);
@@ -325,8 +348,7 @@ impl TrayController {
             } else {
                 render_badge_rgba(badge_hex)
             };
-            if let Ok(icon) =
-                Icon::from_rgba(pixels, TRAY_ICON_SIZE as u32, TRAY_ICON_SIZE as u32)
+            if let Ok(icon) = Icon::from_rgba(pixels, TRAY_ICON_SIZE as u32, TRAY_ICON_SIZE as u32)
             {
                 let _ = self.tray.set_icon(Some(icon));
             }
@@ -352,9 +374,11 @@ pub struct PhysicalRect {
 #[cfg(windows)]
 pub fn work_area_for_point(px: i32, py: i32) -> PhysicalRect {
     use windows::Win32::Foundation::{POINT, RECT};
-    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
     };
 
     unsafe {
@@ -471,7 +495,9 @@ mod tests {
         let rgba = render_aqi_digits_rgba("#F43F5E", "145");
         assert_eq!(rgba.len(), 32 * 32 * 4);
         let white_pixels = rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|px| px[0] == 255 && px[1] == 255 && px[2] == 255 && px[3] == 255)
             .count();
         assert!(white_pixels > 40);

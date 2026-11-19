@@ -10,8 +10,8 @@ use crate::constants::{
 use crate::poller::TelemetrySnapshot;
 use crate::theme::{active_tint_bg, border_subtle, get_connection_label, hover_overlay};
 
-use super::icons::{draw_close_icon, draw_external_link_icon, draw_gear_icon, draw_pin_icon};
 use super::PiGradientApp;
+use super::icons::{draw_close_icon, draw_external_link_icon, draw_gear_icon, draw_pin_icon};
 
 #[derive(Clone, Copy)]
 enum HeaderIconKind {
@@ -55,8 +55,7 @@ impl PiGradientApp {
                     ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
 
                     // Left status badge + title
-                    let (dot_rect, _) =
-                        ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+                    let (dot_rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
                     ui.painter()
                         .circle_filled(dot_rect.center(), 5.0, badge_color);
                     ui.painter().circle_stroke(
@@ -73,11 +72,13 @@ impl PiGradientApp {
                     );
                     ui.label(RichText::new("·").size(11.0).color(TEXT_MUTED));
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(status_label)
-                                .size(11.0)
-                                .color(if is_live { TEXT_PRIMARY } else { TEXT_SECONDARY }),
-                        )
+                        egui::Label::new(RichText::new(status_label).size(11.0).color(
+                            if is_live {
+                                TEXT_PRIMARY
+                            } else {
+                                TEXT_SECONDARY
+                            },
+                        ))
                         .truncate(),
                     );
 
@@ -171,7 +172,11 @@ fn header_icon_button(
 ) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(
         Vec2::splat(28.0),
-        if enabled { Sense::click() } else { Sense::hover() },
+        if enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
     );
     let painter = ui.painter();
 

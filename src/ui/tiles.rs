@@ -171,7 +171,12 @@ pub(super) fn render_kpi_grid(
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("400").size(9.5).monospace().color(TEXT_MUTED));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(RichText::new("1800").size(9.5).monospace().color(TEXT_MUTED));
+                        ui.label(
+                            RichText::new("1800")
+                                .size(9.5)
+                                .monospace()
+                                .color(TEXT_MUTED),
+                        );
                     });
                 });
             });
@@ -233,7 +238,12 @@ pub(super) fn render_kpi_grid(
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Climate").size(11.0).color(TEXT_SECONDARY));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(RichText::new(hi_str).size(11.0).monospace().color(TEXT_MUTED));
+                    ui.label(
+                        RichText::new(hi_str)
+                            .size(11.0)
+                            .monospace()
+                            .color(TEXT_MUTED),
+                    );
                 });
             });
 

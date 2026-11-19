@@ -253,7 +253,10 @@ impl PiGradientApp {
         // Bottom footer action bar (#14171D + top hairline)
         let sep_start = ui.next_widget_position();
         ui.painter().line_segment(
-            [sep_start, Pos2::new(sep_start.x + FLYOUT_WIDTH, sep_start.y)],
+            [
+                sep_start,
+                Pos2::new(sep_start.x + FLYOUT_WIDTH, sep_start.y),
+            ],
             Stroke::new(1.0, border_subtle()),
         );
 
@@ -272,7 +275,10 @@ impl PiGradientApp {
                     ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
                     let save_btn = egui::Button::new(
-                        RichText::new("Save").size(12.0).strong().color(Color32::WHITE),
+                        RichText::new("Save")
+                            .size(12.0)
+                            .strong()
+                            .color(Color32::WHITE),
                     )
                     .fill(ACCENT_PRIMARY)
                     .stroke(Stroke::NONE)

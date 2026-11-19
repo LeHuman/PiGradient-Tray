@@ -4,8 +4,8 @@ use eframe::egui::{
 };
 
 use crate::constants::{
-    ACCENT_FOCUS_CO2, ACCENT_PM25, CO2_GAUGE_MIN, FLYOUT_WIDTH, MAX_SPARKLINE_POINTS,
-    SURFACE_TILE, TEXT_MUTED, TEXT_SECONDARY,
+    ACCENT_FOCUS_CO2, ACCENT_PM25, CO2_GAUGE_MIN, FLYOUT_WIDTH, MAX_SPARKLINE_POINTS, SURFACE_TILE,
+    TEXT_MUTED, TEXT_SECONDARY,
 };
 use crate::poller::HistoryPoint;
 use crate::theme::border_subtle;
@@ -156,10 +156,7 @@ impl PiGradientApp {
                     let co2_norm =
                         ((pt.rco2 - co2_min) / (co2_max - co2_min).max(1.0)).clamp(0.0, 1.0) as f32;
 
-                    pm_pts.push(Pos2::new(
-                        x,
-                        plot_rect.bottom() - pad_y - pm_norm * inner_h,
-                    ));
+                    pm_pts.push(Pos2::new(x, plot_rect.bottom() - pad_y - pm_norm * inner_h));
                     co2_pts.push(Pos2::new(
                         x,
                         plot_rect.bottom() - pad_y - co2_norm * inner_h,

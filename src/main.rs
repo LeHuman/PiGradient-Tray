@@ -16,22 +16,21 @@ use crate::constants::{
     TRAY_ICON_SIZE,
 };
 use crate::poller::SharedAppState;
-use crate::tray::{render_badge_rgba, TrayAction, TrayController};
+use crate::tray::{TrayAction, TrayController, render_badge_rgba};
 use crate::ui::PiGradientApp;
 
 #[cfg(windows)]
 fn spawn_windows_power_listener(wake_notify: Arc<tokio::sync::Notify>) {
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, MSG, PBT_APMRESUMEAUTOMATIC, WINDOW_EX_STYLE,
+        CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW,
+        MSG, PBT_APMRESUMEAUTOMATIC, RegisterClassW, TranslateMessage, WINDOW_EX_STYLE,
         WM_POWERBROADCAST, WNDCLASSW, WS_OVERLAPPED,
     };
+    use windows::core::PCWSTR;
 
     std::thread::spawn(move || unsafe {
-        static WAKE_TX: std::sync::OnceLock<Arc<tokio::sync::Notify>> =
-            std::sync::OnceLock::new();
+        static WAKE_TX: std::sync::OnceLock<Arc<tokio::sync::Notify>> = std::sync::OnceLock::new();
         let _ = WAKE_TX.set(wake_notify);
 
         unsafe extern "system" fn wnd_proc(
@@ -40,10 +39,11 @@ fn spawn_windows_power_listener(wake_notify: Arc<tokio::sync::Notify>) {
             wparam: WPARAM,
             lparam: LPARAM,
         ) -> LRESULT {
-            if msg == WM_POWERBROADCAST && wparam.0 as u32 == PBT_APMRESUMEAUTOMATIC {
-                if let Some(notify) = WAKE_TX.get() {
-                    notify.notify_waiters();
-                }
+            if msg == WM_POWERBROADCAST
+                && wparam.0 as u32 == PBT_APMRESUMEAUTOMATIC
+                && let Some(notify) = WAKE_TX.get()
+            {
+                notify.notify_waiters();
             }
             unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
         }
