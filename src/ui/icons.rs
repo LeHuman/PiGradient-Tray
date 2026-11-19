@@ -1,7 +1,5 @@
 use eframe::egui::{Color32, Painter, Pos2, Rect, Stroke};
 
-use crate::constants::SURFACE_HEADER;
-
 pub(super) fn draw_external_link_icon(painter: &Painter, c: Pos2, color: Color32) {
     let s = Stroke::new(1.3, color);
     let box_rect = Rect::from_min_max(
@@ -98,17 +96,18 @@ pub(super) fn draw_pin_icon(painter: &Painter, c: Pos2, color: Color32, pinned: 
 pub(super) fn draw_gear_icon(painter: &Painter, c: Pos2, color: Color32) {
     let s = Stroke::new(1.3, color);
     painter.circle_stroke(c, 4.2, s);
-    painter.circle_stroke(c, 1.8, s);
-    for i in 0..4 {
+    for i in 0..8 {
         let angle = (i as f32) * std::f32::consts::FRAC_PI_4;
-        let dx = angle.cos() * 5.8;
-        let dy = angle.sin() * 5.8;
+        let cos = angle.cos();
+        let sin = angle.sin();
         painter.line_segment(
-            [Pos2::new(c.x - dx, c.y - dy), Pos2::new(c.x + dx, c.y + dy)],
+            [
+                Pos2::new(c.x + cos * 3.6, c.y + sin * 3.6),
+                Pos2::new(c.x + cos * 5.8, c.y + sin * 5.8),
+            ],
             Stroke::new(1.2, color),
         );
     }
-    painter.circle_filled(c, 3.3, SURFACE_HEADER);
     painter.circle_stroke(c, 3.6, s);
     painter.circle_stroke(c, 1.5, s);
 }

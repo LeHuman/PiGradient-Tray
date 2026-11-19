@@ -15,18 +15,16 @@ use crate::config::{
     AppSettings, normalize_gateway_url, save_settings_to_disk, set_windows_startup,
 };
 use crate::constants::{
-    ACCENT_PRIMARY, CARD_BLEED, CARD_STROKE_WIDTH, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT,
-    FLYOUT_OUTER_WIDTH, FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH, FOCUS_LOSS_GRACE_MS, PARKED_POS,
-    SURFACE_CARD, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
+    CARD_BLEED, CARD_STROKE_WIDTH, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT, FLYOUT_OUTER_WIDTH,
+    FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH, FOCUS_LOSS_GRACE_MS, PARKED_POS, SURFACE_CARD,
+    SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
 };
 use crate::poller::{SharedAppState, TelemetrySnapshot};
-use crate::theme::{
-    self, border_card, border_subtle, format_relative_time, hover_overlay, parse_color32,
-};
+use crate::theme::{self, border_card, border_subtle, format_relative_time, parse_color32};
 use crate::tray::{TrayAction, TrayController, compute_flyout_logical_pos, work_area_for_point};
 
 use icons::draw_wifi_off_icon;
-use settings::SettingsFormState;
+use settings::{ButtonKind, SettingsFormState, render_pill_button};
 use tiles::render_kpi_grid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -349,17 +347,15 @@ impl PiGradientApp {
                         },
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let btn = egui::Button::new(
-                            RichText::new("Set URL")
-                                .size(11.0)
-                                .strong()
-                                .color(Color32::WHITE),
+                        if render_pill_button(
+                            ui,
+                            RichText::new("Set URL").size(11.0).strong(),
+                            Vec2::new(64.0, 30.0),
+                            6,
+                            ButtonKind::Primary,
                         )
-                        .fill(ACCENT_PRIMARY)
-                        .stroke(Stroke::NONE)
-                        .corner_radius(CornerRadius::same(6))
-                        .min_size(Vec2::new(64.0, 30.0));
-                        if ui.add(btn).clicked() {
+                        .clicked()
+                        {
                             self.open_settings_view();
                         }
                     });
@@ -421,14 +417,15 @@ impl PiGradientApp {
                     );
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let retry_btn = egui::Button::new(
-                            RichText::new("Retry").size(11.0).color(TEXT_PRIMARY),
+                        if render_pill_button(
+                            ui,
+                            RichText::new("Retry").size(11.0),
+                            Vec2::new(62.0, 30.0),
+                            6,
+                            ButtonKind::Secondary,
                         )
-                        .fill(hover_overlay())
-                        .stroke(Stroke::NONE)
-                        .corner_radius(CornerRadius::same(6))
-                        .min_size(Vec2::new(62.0, 30.0));
-                        if ui.add(retry_btn).clicked() {
+                        .clicked()
+                        {
                             self.state.trigger_refresh();
                         }
                     });
@@ -572,6 +569,14 @@ impl eframe::App for PiGradientApp {
                         self.hidden_by_blur_at = Some(Instant::now());
                         self.hide_flyout(ctx);
                     }
+                }
+
+                // egui idles between events, and a click into another
+                // application delivers no event to this window, so a blur would
+                // otherwise only be noticed on the next poll tick. Pulse while
+                // the flyout is shown so the foreground check runs promptly.
+                if !self.state.read_settings().pin_flyout {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(100));
                 }
             }
 

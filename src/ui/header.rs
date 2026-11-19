@@ -8,7 +8,9 @@ use crate::constants::{
     ACCENT_FOCUS_CO2, FLYOUT_WIDTH, SURFACE_HEADER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
 };
 use crate::poller::TelemetrySnapshot;
-use crate::theme::{active_tint_bg, border_subtle, get_connection_label, hover_overlay};
+use crate::theme::{
+    active_tint_bg, border_input, border_subtle, get_connection_label, hover_overlay,
+};
 
 use super::PiGradientApp;
 use super::icons::{draw_close_icon, draw_external_link_icon, draw_gear_icon, draw_pin_icon};
@@ -182,19 +184,54 @@ fn header_icon_button(
         },
     );
     let painter = ui.painter();
+    let hovered = enabled && resp.hovered();
+    let pressed = enabled && resp.is_pointer_button_down_on();
 
-    let bg = if !enabled {
-        Color32::TRANSPARENT
+    if hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let (bg, stroke, fg) = if !enabled {
+        (
+            Color32::TRANSPARENT,
+            Stroke::NONE,
+            Color32::from_rgba_unmultiplied(156, 163, 175, 90),
+        )
+    } else if active && pressed {
+        (
+            active_tint_bg().blend(active_tint_bg()),
+            Stroke::new(1.0, ACCENT_FOCUS_CO2),
+            Color32::WHITE,
+        )
+    } else if active && hovered {
+        (
+            active_tint_bg().blend(hover_overlay()),
+            Stroke::new(1.0, ACCENT_FOCUS_CO2.gamma_multiply(0.65)),
+            Color32::WHITE,
+        )
     } else if active {
-        active_tint_bg()
-    } else if resp.hovered() {
-        hover_overlay()
+        (active_tint_bg(), Stroke::NONE, ACCENT_FOCUS_CO2)
+    } else if pressed {
+        (
+            active_tint_bg(),
+            Stroke::new(1.0, ACCENT_FOCUS_CO2.gamma_multiply(0.75)),
+            ACCENT_FOCUS_CO2,
+        )
+    } else if hovered {
+        (
+            hover_overlay(),
+            Stroke::new(1.0, border_input()),
+            Color32::WHITE,
+        )
     } else {
-        Color32::TRANSPARENT
+        (Color32::TRANSPARENT, Stroke::NONE, TEXT_SECONDARY)
     };
 
     if bg != Color32::TRANSPARENT {
         painter.rect_filled(rect, CornerRadius::same(6), bg);
+    }
+    if stroke != Stroke::NONE {
+        painter.rect_stroke(rect, CornerRadius::same(6), stroke, StrokeKind::Inside);
     }
     if resp.has_focus() {
         painter.rect_stroke(
@@ -204,16 +241,6 @@ fn header_icon_button(
             StrokeKind::Inside,
         );
     }
-
-    let fg = if !enabled {
-        Color32::from_rgba_unmultiplied(156, 163, 175, 90)
-    } else if active {
-        ACCENT_FOCUS_CO2
-    } else if resp.hovered() {
-        Color32::WHITE
-    } else {
-        TEXT_SECONDARY
-    };
 
     let c = rect.center();
     match icon {

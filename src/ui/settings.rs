@@ -1,16 +1,138 @@
 use eframe::egui::{
-    self, Align, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, RichText, Stroke, Vec2,
+    self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, RichText,
+    Role, Sense, Stroke, StrokeKind, TextStyle, Vec2, WidgetAtom, WidgetInfo,
 };
 
 use crate::config::AppSettings;
 use crate::constants::{
-    ACCENT_PRIMARY, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT, DEFAULT_TRAY_ICON_STYLE,
-    ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE,
-    TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
+    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT,
+    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, SURFACE_CARD,
+    SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
 };
-use crate::theme::border_subtle;
+use crate::theme::{active_tint_bg, border_input, border_subtle, hover_overlay};
 
 use super::PiGradientApp;
+
+#[derive(Clone, Copy)]
+pub(super) enum ButtonKind {
+    Primary,
+    Secondary,
+    Ghost,
+    Segment { active: bool },
+}
+
+pub(super) fn render_pill_button(
+    ui: &mut egui::Ui,
+    text: RichText,
+    min_size: Vec2,
+    corner_radius: u8,
+    kind: ButtonKind,
+) -> egui::Response {
+    let label_text = text.text().to_owned();
+    let mut prepared = WidgetAtom::new(text.color(Color32::PLACEHOLDER))
+        .sense(Sense::click())
+        .fallback_font(TextStyle::Button)
+        .frame(
+            Frame::new()
+                .inner_margin(ui.spacing().button_padding)
+                .corner_radius(CornerRadius::same(corner_radius)),
+        )
+        .min_size(min_size)
+        .align2(Align2::CENTER_CENTER)
+        .allocate(ui);
+
+    let hovered = prepared.response.hovered();
+    let pressed = prepared.response.is_pointer_button_down_on();
+    let focused = prepared.response.has_focus();
+
+    if hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let (bg, stroke, fg) = match kind {
+        ButtonKind::Primary | ButtonKind::Segment { active: true } => {
+            if pressed {
+                (
+                    ACCENT_PRIMARY.gamma_multiply(0.78),
+                    Stroke::new(1.5, ACCENT_FOCUS_CO2),
+                    Color32::WHITE,
+                )
+            } else if hovered {
+                (
+                    ACCENT_PRIMARY.blend(hover_overlay()),
+                    Stroke::new(1.0, ACCENT_FOCUS_CO2),
+                    Color32::WHITE,
+                )
+            } else {
+                (ACCENT_PRIMARY, Stroke::NONE, Color32::WHITE)
+            }
+        }
+        ButtonKind::Segment { active: false } | ButtonKind::Ghost => {
+            if pressed {
+                (
+                    active_tint_bg(),
+                    Stroke::new(1.0, ACCENT_FOCUS_CO2.gamma_multiply(0.75)),
+                    Color32::WHITE,
+                )
+            } else if hovered {
+                (
+                    hover_overlay(),
+                    Stroke::new(1.0, border_input()),
+                    Color32::WHITE,
+                )
+            } else {
+                (Color32::TRANSPARENT, Stroke::NONE, TEXT_SECONDARY)
+            }
+        }
+        ButtonKind::Secondary => {
+            if pressed {
+                (
+                    active_tint_bg(),
+                    Stroke::new(1.5, ACCENT_FOCUS_CO2),
+                    Color32::WHITE,
+                )
+            } else if hovered {
+                (
+                    hover_overlay().blend(hover_overlay()),
+                    Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 55)),
+                    Color32::WHITE,
+                )
+            } else {
+                (hover_overlay(), Stroke::NONE, TEXT_PRIMARY)
+            }
+        }
+    };
+
+    prepared.container.frame.fill = bg;
+    prepared.container.fallback_text_color = fg;
+    let painted = prepared.paint(ui);
+
+    if stroke != Stroke::NONE {
+        ui.painter().rect_stroke(
+            painted.response.rect,
+            CornerRadius::same(corner_radius),
+            stroke,
+            StrokeKind::Inside,
+        );
+    }
+    if focused {
+        ui.painter().rect_stroke(
+            painted.response.rect,
+            CornerRadius::same(corner_radius),
+            Stroke::new(1.5, ACCENT_FOCUS_CO2),
+            StrokeKind::Inside,
+        );
+    }
+
+    painted.response.widget_info(|| match kind {
+        ButtonKind::Segment { active } => {
+            WidgetInfo::selected(Role::Button, ui.is_enabled(), active, &label_text)
+        }
+        _ => WidgetInfo::labeled(Role::Button, ui.is_enabled(), &label_text),
+    });
+
+    painted.response
+}
 
 pub(crate) struct SettingsFormState {
     pub gateway_url: String,
@@ -118,24 +240,15 @@ impl PiGradientApp {
                                         ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
                                         for (code, label) in [("f", "°F"), ("c", "°C")] {
                                             let active = self.settings_form.temp_unit == code;
-                                            let btn = egui::Button::new(
-                                                RichText::new(label).size(11.5).strong().color(
-                                                    if active {
-                                                        Color32::WHITE
-                                                    } else {
-                                                        TEXT_SECONDARY
-                                                    },
-                                                ),
+                                            if render_pill_button(
+                                                ui,
+                                                RichText::new(label).size(11.5).strong(),
+                                                Vec2::new(seg_w, 26.0),
+                                                4,
+                                                ButtonKind::Segment { active },
                                             )
-                                            .fill(if active {
-                                                ACCENT_PRIMARY
-                                            } else {
-                                                Color32::TRANSPARENT
-                                            })
-                                            .stroke(Stroke::NONE)
-                                            .corner_radius(CornerRadius::same(4))
-                                            .min_size(Vec2::new(seg_w, 26.0));
-                                            if ui.add(btn).clicked() {
+                                            .clicked()
+                                            {
                                                 self.settings_form.temp_unit = code.to_string();
                                             }
                                         }
@@ -158,7 +271,34 @@ impl PiGradientApp {
                             let selected_label =
                                 format!("Every {}s", self.settings_form.idle_poll_seconds);
                             ui.spacing_mut().interact_size.y = 32.0;
-                            egui::ComboBox::from_id_salt("idle_poll_select")
+                            let prev_visuals = ui.visuals().clone();
+                            {
+                                let v = ui.visuals_mut();
+                                v.widgets.inactive.weak_bg_fill = SURFACE_TILE;
+                                v.widgets.inactive.bg_fill = SURFACE_TILE;
+                                v.widgets.inactive.bg_stroke = Stroke::new(1.0, border_input());
+                                v.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY);
+
+                                v.widgets.hovered.weak_bg_fill =
+                                    SURFACE_TILE.blend(hover_overlay());
+                                v.widgets.hovered.bg_fill = SURFACE_TILE.blend(hover_overlay());
+                                v.widgets.hovered.bg_stroke = Stroke::new(
+                                    1.0,
+                                    Color32::from_rgba_unmultiplied(255, 255, 255, 55),
+                                );
+                                v.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+
+                                v.widgets.active.weak_bg_fill = active_tint_bg();
+                                v.widgets.active.bg_fill = active_tint_bg();
+                                v.widgets.active.bg_stroke = Stroke::new(1.5, ACCENT_FOCUS_CO2);
+                                v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+
+                                v.widgets.open.weak_bg_fill = SURFACE_TILE.blend(hover_overlay());
+                                v.widgets.open.bg_fill = SURFACE_TILE.blend(hover_overlay());
+                                v.widgets.open.bg_stroke = Stroke::new(1.5, ACCENT_FOCUS_CO2);
+                                v.widgets.open.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+                            }
+                            let combo_resp = egui::ComboBox::from_id_salt("idle_poll_select")
                                 .width(col_w)
                                 .selected_text(
                                     RichText::new(selected_label)
@@ -167,14 +307,39 @@ impl PiGradientApp {
                                         .color(Color32::WHITE),
                                 )
                                 .show_ui(ui, |ui| {
+                                    let v = ui.visuals_mut();
+                                    v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+                                    v.widgets.inactive.bg_stroke = Stroke::NONE;
+                                    v.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY);
+
+                                    v.widgets.hovered.weak_bg_fill = hover_overlay();
+                                    v.widgets.hovered.bg_stroke = Stroke::new(1.0, border_input());
+                                    v.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+
+                                    v.widgets.active.weak_bg_fill = active_tint_bg();
+                                    v.widgets.active.bg_stroke = Stroke::new(1.0, ACCENT_FOCUS_CO2);
+                                    v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+
+                                    v.selection.bg_fill = ACCENT_PRIMARY;
+                                    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+                                    v.interact_cursor = Some(egui::CursorIcon::PointingHand);
+
                                     for secs in IDLE_POLL_PRESETS {
-                                        ui.selectable_value(
+                                        let item_resp = ui.selectable_value(
                                             &mut self.settings_form.idle_poll_seconds,
                                             secs,
                                             format!("Every {secs}s"),
                                         );
+                                        if item_resp.hovered() {
+                                            ui.ctx()
+                                                .set_cursor_icon(egui::CursorIcon::PointingHand);
+                                        }
                                     }
                                 });
+                            *ui.visuals_mut() = prev_visuals;
+                            if combo_resp.response.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
                         },
                     );
                 });
@@ -210,24 +375,15 @@ impl PiGradientApp {
                                             {
                                                 let active =
                                                     self.settings_form.tray_icon_style == id;
-                                                let btn = egui::Button::new(
-                                                    RichText::new(label).size(11.0).strong().color(
-                                                        if active {
-                                                            Color32::WHITE
-                                                        } else {
-                                                            TEXT_SECONDARY
-                                                        },
-                                                    ),
+                                                if render_pill_button(
+                                                    ui,
+                                                    RichText::new(label).size(11.0).strong(),
+                                                    Vec2::new(54.0, 22.0),
+                                                    3,
+                                                    ButtonKind::Segment { active },
                                                 )
-                                                .fill(if active {
-                                                    ACCENT_PRIMARY
-                                                } else {
-                                                    Color32::TRANSPARENT
-                                                })
-                                                .stroke(Stroke::NONE)
-                                                .corner_radius(CornerRadius::same(3))
-                                                .min_size(Vec2::new(54.0, 22.0));
-                                                if ui.add(btn).clicked() {
+                                                .clicked()
+                                                {
                                                     self.settings_form.tray_icon_style =
                                                         id.to_string();
                                                 }
@@ -245,7 +401,11 @@ impl PiGradientApp {
                                     .color(TEXT_PRIMARY),
                             );
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                ui.checkbox(&mut self.settings_form.launch_at_startup, "");
+                                let cb_resp =
+                                    ui.checkbox(&mut self.settings_form.launch_at_startup, "");
+                                if cb_resp.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
                             });
                         });
                     });
@@ -277,31 +437,27 @@ impl PiGradientApp {
                     |ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-                        let save_btn = egui::Button::new(
-                            RichText::new("Save")
-                                .size(12.0)
-                                .strong()
-                                .color(Color32::WHITE),
+                        if render_pill_button(
+                            ui,
+                            RichText::new("Save").size(12.0).strong(),
+                            Vec2::new(66.0, 32.0),
+                            6,
+                            ButtonKind::Primary,
                         )
-                        .fill(ACCENT_PRIMARY)
-                        .stroke(Stroke::NONE)
-                        .corner_radius(CornerRadius::same(6))
-                        .min_size(Vec2::new(66.0, 32.0));
-                        if ui.add(save_btn).clicked() {
+                        .clicked()
+                        {
                             self.submit_settings_form();
                         }
 
-                        let cancel_btn = egui::Button::new(
-                            RichText::new("Cancel")
-                                .size(12.0)
-                                .strong()
-                                .color(TEXT_SECONDARY),
+                        if render_pill_button(
+                            ui,
+                            RichText::new("Cancel").size(12.0).strong(),
+                            Vec2::new(62.0, 32.0),
+                            6,
+                            ButtonKind::Ghost,
                         )
-                        .fill(Color32::TRANSPARENT)
-                        .stroke(Stroke::NONE)
-                        .corner_radius(CornerRadius::same(6))
-                        .min_size(Vec2::new(62.0, 32.0));
-                        if ui.add(cancel_btn).clicked() {
+                        .clicked()
+                        {
                             self.in_settings = false;
                         }
                     },
