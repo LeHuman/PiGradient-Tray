@@ -101,7 +101,10 @@ impl PiGradientApp {
                 r.position.y as i32 + (r.size.height as i32 / 2),
             )
         } else {
-            work_area_for_point(1900, 1060)
+            // Menu-triggered open with no tray rect: use the monitor the
+            // pointer is on rather than assuming a 1920x1080 desktop.
+            let (px, py) = crate::cursor_position().unwrap_or((0, 0));
+            work_area_for_point(px, py)
         };
         compute_flyout_logical_pos(self.last_tray_rect, FLYOUT_OUTER_WIDTH, height, ppp, wa)
     }
@@ -162,6 +165,9 @@ impl PiGradientApp {
         self.shown_at = None;
         self.seen_focused_while_shown = false;
         self.hover_history_idx = None;
+        // Match the tray convention: dismissing the flyout returns it to the
+        // main view, so the next open never lands in the settings page.
+        self.in_settings = false;
         self.state.set_flyout_visible(false);
         self.park_window(ctx);
         ctx.request_repaint();

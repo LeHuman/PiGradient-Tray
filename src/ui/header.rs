@@ -13,10 +13,13 @@ use crate::theme::{
 };
 
 use super::PiGradientApp;
-use super::icons::{draw_close_icon, draw_external_link_icon, draw_gear_icon, draw_pin_icon};
+use super::icons::{
+    draw_back_icon, draw_close_icon, draw_external_link_icon, draw_gear_icon, draw_pin_icon,
+};
 
 #[derive(Clone, Copy)]
 enum HeaderIconKind {
+    Back,
     ExternalLink,
     Pin(bool),
     Settings,
@@ -57,16 +60,33 @@ impl PiGradientApp {
                     |ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
 
-                        // Left status badge + title
-                        let (dot_rect, _) =
-                            ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
-                        ui.painter()
-                            .circle_filled(dot_rect.center(), 5.0, badge_color);
-                        ui.painter().circle_stroke(
-                            dot_rect.center(),
-                            5.0,
-                            Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 38)),
-                        );
+                        // Left status badge, or a back affordance while in settings
+                        if self.in_settings {
+                            if header_icon_button(
+                                ui,
+                                HeaderIconKind::Back,
+                                false,
+                                true,
+                                "Back to telemetry",
+                            )
+                            .clicked()
+                            {
+                                self.in_settings = false;
+                            }
+                        } else {
+                            let (dot_rect, _) =
+                                ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+                            ui.painter()
+                                .circle_filled(dot_rect.center(), 5.0, badge_color);
+                            ui.painter().circle_stroke(
+                                dot_rect.center(),
+                                5.0,
+                                Stroke::new(
+                                    1.0,
+                                    Color32::from_rgba_unmultiplied(255, 255, 255, 38),
+                                ),
+                            );
+                        }
 
                         ui.label(
                             RichText::new("PiGradient")
@@ -122,37 +142,39 @@ impl PiGradientApp {
                                 }
                             }
 
-                            if header_icon_button(
-                                ui,
-                                HeaderIconKind::Pin(settings.pin_flyout),
-                                settings.pin_flyout,
-                                true,
-                                if settings.pin_flyout {
-                                    "Unpin flyout (auto-hide on blur)"
-                                } else {
-                                    "Pin flyout open"
-                                },
-                            )
-                            .clicked()
-                            {
-                                self.toggle_pin();
-                            }
+                            if !self.in_settings {
+                                if header_icon_button(
+                                    ui,
+                                    HeaderIconKind::Pin(settings.pin_flyout),
+                                    settings.pin_flyout,
+                                    true,
+                                    if settings.pin_flyout {
+                                        "Unpin flyout (auto-hide on blur)"
+                                    } else {
+                                        "Pin flyout open"
+                                    },
+                                )
+                                .clicked()
+                                {
+                                    self.toggle_pin();
+                                }
 
-                            if header_icon_button(
-                                ui,
-                                HeaderIconKind::ExternalLink,
-                                false,
-                                has_url,
-                                if has_url {
-                                    "Open PiGradient Web Dashboard"
-                                } else {
-                                    "Set Gateway URL first"
-                                },
-                            )
-                            .clicked()
-                                && has_url
-                            {
-                                self.open_dashboard();
+                                if header_icon_button(
+                                    ui,
+                                    HeaderIconKind::ExternalLink,
+                                    false,
+                                    has_url,
+                                    if has_url {
+                                        "Open PiGradient Web Dashboard"
+                                    } else {
+                                        "Set Gateway URL first"
+                                    },
+                                )
+                                .clicked()
+                                    && has_url
+                                {
+                                    self.open_dashboard();
+                                }
                             }
                         });
                     },
@@ -247,6 +269,7 @@ fn header_icon_button(
         HeaderIconKind::ExternalLink => draw_external_link_icon(painter, c, fg),
         HeaderIconKind::Pin(pinned) => draw_pin_icon(painter, c, fg, pinned),
         HeaderIconKind::Settings => draw_gear_icon(painter, c, fg),
+        HeaderIconKind::Back => draw_back_icon(painter, c, fg),
         HeaderIconKind::Close => draw_close_icon(painter, c, fg),
     }
 

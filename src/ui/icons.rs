@@ -1,4 +1,15 @@
-use eframe::egui::{Color32, Painter, Pos2, Rect, Stroke};
+use eframe::egui::{Color32, Painter, Pos2, Rect, Shape, Stroke};
+
+pub(super) fn draw_back_icon(painter: &Painter, c: Pos2, color: Color32) {
+    painter.add(Shape::line(
+        vec![
+            Pos2::new(c.x + 2.2, c.y - 4.2),
+            Pos2::new(c.x - 2.2, c.y),
+            Pos2::new(c.x + 2.2, c.y + 4.2),
+        ],
+        Stroke::new(1.4, color),
+    ));
+}
 
 pub(super) fn draw_external_link_icon(painter: &Painter, c: Pos2, color: Color32) {
     let s = Stroke::new(1.3, color);

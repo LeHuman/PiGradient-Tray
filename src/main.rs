@@ -336,6 +336,22 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
 #[cfg(not(windows))]
 fn ensure_borderless_window_policy(_frame: &eframe::Frame) {}
 
+/// Physical position of the mouse pointer, if the platform can report it.
+#[cfg(windows)]
+pub(crate) fn cursor_position() -> Option<(i32, i32)> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+    let mut point = POINT::default();
+    unsafe { GetCursorPos(&mut point) }.ok()?;
+    Some((point.x, point.y))
+}
+
+#[cfg(not(windows))]
+pub(crate) fn cursor_position() -> Option<(i32, i32)> {
+    None
+}
+
 /// Forces the flyout to the foreground without relying on the windowing
 /// layer's own activation path.
 ///
