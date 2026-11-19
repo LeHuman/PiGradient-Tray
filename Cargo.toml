@@ -13,8 +13,6 @@ exclude = [
   ".agents/",
   ".github/",
   ".vscode/",
-  "package.json",
-  "metadata.json",
 ]
 
 [build-dependencies]

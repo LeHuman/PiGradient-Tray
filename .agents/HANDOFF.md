@@ -46,9 +46,8 @@
 | `/.github/workflows/auto-merge.yml` | On `dependabot[bot]` PRs: runs `cargo clippy --fix` + `cargo fmt --all`, pushes mechanical fixes if changed, verifies fmt/clippy/test/release build on `windows-latest`, enables `gh pr merge --auto --merge` on `semver-patch`, and comments on PR failure with run logs. |
 | `/.github/workflows/audit.yml` | Runs `rustsec/audit-check@v2.0.0` every 4 days and on `Cargo.toml`/`Cargo.lock` pushes & PRs. |
 
-### AI Studio Minimal Stub (`package.json`, `metadata.json`)
-- The Vite/React web harness (`src/` web components, `index.html`, `vite.config.ts`, `tsconfig.json`) has already been removed.
-- Only dependency-free `package.json` (Node built-in `dev`/`build`/`lint` scripts) and `metadata.json` remain so Google AI Studio's applet lifecycle checks pass; both are excluded from `/Cargo.toml` and can be deleted cleanly outside AI Studio.
+### AI Studio Scaffolding
+- The Vite/React web harness and the AI Studio `package.json` / `metadata.json` stubs have been removed; the repository is a pure Cargo project.
 
 ---
 
@@ -98,7 +97,7 @@
 1. **Settings -> General -> Pull Requests**: Enable **Allow auto-merge**.
 2. **Settings -> Actions -> General -> Workflow permissions**: Select **Read and write permissions**.
 3. **Settings -> Secrets and variables -> Actions** *(for `crates.io` auto-publish)*: Add `CARGO_REGISTRY_TOKEN`.
-4. Before publishing to `crates.io`: add `repository = "https://github.com/<owner>/<repo>"` and `readme = "README.md"` in `/Cargo.toml` if desired, and remove `package.json` / `metadata.json` when exporting out of AI Studio.
+4. Before publishing to `crates.io`: add `repository = "https://github.com/<owner>/<repo>"` and `readme = "README.md"` in `/Cargo.toml` if desired.
 
 ### Verification Status
 - **Verified in Linux container**:
