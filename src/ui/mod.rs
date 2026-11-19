@@ -469,6 +469,15 @@ impl eframe::App for PiGradientApp {
         // it is ever shown.
         crate::ensure_borderless_window_policy(frame);
 
+        // Tell egui the truth about viewport focus. eframe's 0.37 `App::ui`
+        // path can leave `InputState::focused` false for a window that Windows
+        // has activated, and egui gates the text caret and focus rings on that
+        // flag: the gateway URL field would accept typing with no visible
+        // caret. The Win32 foreground window is authoritative.
+        if let Some(has_foreground) = crate::flyout_has_foreground(frame) {
+            ctx.input_mut(|input| input.focused = has_foreground);
+        }
+
         if self.reveal_phase == RevealPhase::RevealNow {
             if let Some(pos) = self.pending_reveal.take() {
                 let ppp = ctx.pixels_per_point();

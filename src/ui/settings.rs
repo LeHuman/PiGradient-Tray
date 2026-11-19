@@ -193,7 +193,20 @@ impl PiGradientApp {
                         .background_color(SURFACE_TILE)
                         .margin(Margin::symmetric(10, 7))
                         .desired_width(FLYOUT_WIDTH - 24.0);
-                    let resp = ui.add(edit);
+                    // Keep the focus stroke the same width as the resting one.
+                    // egui's focused TextEdit uses `selection.stroke` (1.5px) and
+                    // paints it half outside the field, which grows the widget
+                    // enough that the whole card loses a pixel or two at the
+                    // bottom. The accent colour alone signals focus.
+                    let resp = ui
+                        .scope(|ui| {
+                            let visuals = &mut ui.style_mut().visuals;
+                            visuals.selection.stroke = Stroke::new(1.0, ACCENT_FOCUS_CO2);
+                            visuals.widgets.active.bg_stroke = Stroke::new(1.0, ACCENT_FOCUS_CO2);
+                            visuals.widgets.open.bg_stroke = Stroke::new(1.0, ACCENT_FOCUS_CO2);
+                            ui.add(edit)
+                        })
+                        .inner;
                     if resp.changed() && self.settings_form.error.is_some() {
                         self.settings_form.error = None;
                     }
