@@ -19,7 +19,7 @@
 Windows 10/11 notification-area companion for a self-hosted PiGradient gateway. It polls the gateway over the LAN and opens a 360 px taskbar-anchored flyout with PM2.5/AQI, CO2, climate and VOC/NOx readings plus a one-hour trend chart. It is read-only: it never writes to the gateway.
 <!-- DESCRIPTION END -->
 
-## Why
+### Why
 
 <!-- WHY START -->
 I wanted a Windows companion app for PiGradient so that I can always check telemetry on demand without having to open anything.
