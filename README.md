@@ -43,10 +43,12 @@ I wanted a Windows companion app for PiGradient so that I can always check telem
 ## Installation
 
 ```powershell
-cargo install --path .
+cargo install pigradient-tray
 ```
 
-Or build in place:
+This builds the crate from source and installs `pigradient-tray.exe` into `%USERPROFILE%\.cargo\bin`, so the Windows build requirements above still apply.
+
+For development, build in place instead:
 
 ```powershell
 cargo build --release
