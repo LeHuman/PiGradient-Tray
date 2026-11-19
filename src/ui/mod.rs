@@ -5,7 +5,8 @@ mod sparkline;
 mod tiles;
 
 use eframe::egui::{
-    self, Align, Color32, CornerRadius, Frame, Layout, Margin, RichText, Sense, Stroke, Vec2,
+    self, Align, Color32, CornerRadius, Frame, Layout, Margin, RichText, Sense, Stroke, StrokeKind,
+    Vec2,
 };
 use std::sync::Arc;
 use std::time::Instant;
@@ -14,9 +15,9 @@ use crate::config::{
     AppSettings, normalize_gateway_url, save_settings_to_disk, set_windows_startup,
 };
 use crate::constants::{
-    ACCENT_PRIMARY, CARD_BLEED, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT, FLYOUT_OUTER_WIDTH,
-    FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH, FOCUS_LOSS_GRACE_MS, PARKED_POS, SURFACE_CARD,
-    SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
+    ACCENT_PRIMARY, CARD_BLEED, CARD_STROKE_WIDTH, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT,
+    FLYOUT_OUTER_WIDTH, FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH, FOCUS_LOSS_GRACE_MS, PARKED_POS,
+    SURFACE_CARD, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
 };
 use crate::poller::{SharedAppState, TelemetrySnapshot};
 use crate::theme::{
@@ -618,6 +619,18 @@ impl eframe::App for PiGradientApp {
                         }
                     })
             });
+
+        // Repaint the 1px border last, inset into the card rect. The frame's own
+        // stroke is painted before the children, so the header/footer fills sit
+        // on top of its top and bottom runs; repainting here makes the border
+        // uniform on all four edges at every DPI.
+        let card_rect = card_response.response.rect.shrink(CARD_BLEED);
+        ui.painter().rect_stroke(
+            card_rect,
+            CornerRadius::same(12),
+            Stroke::new(CARD_STROKE_WIDTH, border_card()),
+            StrokeKind::Inside,
+        );
 
         if !self.visible {
             crate::set_window_cloaked(frame, true);
