@@ -182,9 +182,11 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
         DwmSetWindowAttribute,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos, WM_ERASEBKGND,
-        WM_NCCALCSIZE, WNDPROC,
+        CallWindowProcW, DefWindowProcW, GWL_EXSTYLE, GWL_STYLE, GWLP_WNDPROC, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos,
+        WM_ERASEBKGND, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT, WNDPROC, WS_BORDER, WS_CAPTION,
+        WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
+        WS_THICKFRAME,
     };
 
     static HOOKED_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -197,6 +199,14 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
         lparam: LPARAM,
     ) -> LRESULT {
         if msg == WM_NCCALCSIZE && wparam.0 != 0 {
+            return LRESULT(0);
+        }
+        // Claim every non-client paint so Windows never draws a caption, even
+        // if a style write from the windowing layer briefly restores one.
+        if msg == WM_NCACTIVATE {
+            return LRESULT(1);
+        }
+        if msg == WM_NCPAINT {
             return LRESULT(0);
         }
         if msg == WM_ERASEBKGND {
@@ -256,6 +266,55 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
         }
     }
 
+    // Strip the system frame and the "app window" registration. winit starts
+    // from `WS_CAPTION | WS_BORDER | WS_SYSMENU | WS_SIZEBOX` and sets
+    // `WS_EX_APPWINDOW`, and eframe never forwards `with_taskbar(false)`. The
+    // leftover caption styles let DWM flash a title bar with close/minimise
+    // buttons for a frame or two whenever it repaints the non-client area, and
+    // `WS_EX_APPWINDOW` is why the tray-only process shows up in the taskbar
+    // and Task Manager's app list. winit rewrites styles when its own flags
+    // change, so this is re-applied every frame and only touches the window
+    // when something actually drifted.
+    //
+    // The window deliberately stays a plain overlapped window (no `WS_POPUP`):
+    // an owner-less popup changes activation behaviour enough that the flyout
+    // lost foreground on open and its focus-loss auto-hide fired immediately.
+    unsafe {
+        let style =
+            windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let wanted = style
+            & !(WS_CAPTION.0
+                | WS_BORDER.0
+                | WS_SYSMENU.0
+                | WS_MINIMIZEBOX.0
+                | WS_MAXIMIZEBOX.0
+                | WS_THICKFRAME.0);
+        let ex =
+            windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        let wanted_ex = (ex & !WS_EX_APPWINDOW.0) | WS_EX_TOOLWINDOW.0;
+
+        let mut changed = false;
+        if style != wanted {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, wanted as isize);
+            changed = true;
+        }
+        if ex != wanted_ex {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, wanted_ex as isize);
+            changed = true;
+        }
+        if changed {
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+
     // Re-applied on every call instead of once: DWM drops the non-client
     // policy when the window is moved or resized, which is exactly what the
     // flyout does on each show. The call is cheap.
@@ -272,6 +331,47 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
 
 #[cfg(not(windows))]
 fn ensure_borderless_window_policy(_frame: &eframe::Frame) {}
+
+/// Forces the flyout to the foreground without relying on the windowing
+/// layer's own activation path.
+///
+/// A tray click lands in `explorer.exe`, so this process owns neither the
+/// foreground window nor the last input event, and a plain `SetForegroundWindow`
+/// is refused by the foreground lock. Attaching to the current foreground
+/// thread first makes the call legal, which is what keeps the flyout from being
+/// auto-hidden by its own focus-loss guard a frame after it opens.
+#[cfg(windows)]
+pub(crate) fn focus_flyout_window(frame: &eframe::Frame) {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+
+    let Some(hwnd) = hwnd_from_frame(frame) else {
+        return;
+    };
+    unsafe {
+        let foreground = GetForegroundWindow();
+        let foreground_thread = if foreground.0.is_null() {
+            0
+        } else {
+            GetWindowThreadProcessId(foreground, None)
+        };
+        let our_thread = GetCurrentThreadId();
+        let attached = foreground_thread != 0
+            && foreground_thread != our_thread
+            && AttachThreadInput(our_thread, foreground_thread, true).as_bool();
+
+        let _ = SetForegroundWindow(hwnd);
+
+        if attached {
+            let _ = AttachThreadInput(our_thread, foreground_thread, false);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn focus_flyout_window(_frame: &eframe::Frame) {}
 
 /// Controls DWM cloaking (`DWMWA_CLOAK`) so a mapped window can settle its
 /// size and swap buffers offscreen before DWM composites it onto the desktop.

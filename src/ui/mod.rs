@@ -470,6 +470,7 @@ impl eframe::App for PiGradientApp {
 
         if self.reveal_phase == RevealPhase::ReadyToUncloak {
             crate::set_window_cloaked(frame, false);
+            crate::focus_flyout_window(frame);
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             self.shown_at = Some(Instant::now());
             self.seen_focused_while_shown = false;
@@ -537,7 +538,12 @@ impl eframe::App for PiGradientApp {
                         .shown_at
                         .map(|t| t.elapsed().as_millis() > FOCUS_LOSS_GRACE_MS)
                         .unwrap_or(false);
-                    if (self.seen_focused_while_shown || past_grace)
+                    // Only auto-hide if the flyout genuinely held focus and then
+                    // lost it. Windows can refuse activation for a tray-owned
+                    // process entirely; treating "never focused" as "user left"
+                    // closed the flyout a frame after it opened.
+                    if self.seen_focused_while_shown
+                        && past_grace
                         && !self.state.read_settings().pin_flyout
                     {
                         self.hidden_by_blur_at = Some(Instant::now());
