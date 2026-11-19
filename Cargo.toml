@@ -37,8 +37,10 @@ chrono = "0.4"
 eframe = { version = "0.37", default-features = false, features = ["x11", "wayland"] }
 
 [target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
+  "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_System_Power",

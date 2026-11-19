@@ -2983,6 +2983,7 @@ dependencies = [
  "eframe",
  "futures-util",
  "open",
+ "raw-window-handle",
  "reqwest",
  "serde",
  "serde_json",

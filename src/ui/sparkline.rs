@@ -33,7 +33,7 @@ impl PiGradientApp {
             .stroke(Stroke::new(1.0, border_subtle()))
             .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 44.0);
+                ui.set_width(FLYOUT_WIDTH - 46.0);
                 ui.spacing_mut().item_spacing = Vec2::new(0.0, 6.0);
 
                 // Top header row
@@ -75,9 +75,9 @@ impl PiGradientApp {
                     });
                 });
 
-                // Sparkline plot area (316 x 42)
+                // Sparkline plot area (314 x 42)
                 let (plot_rect, resp) =
-                    ui.allocate_exact_size(Vec2::new(FLYOUT_WIDTH - 44.0, 42.0), Sense::hover());
+                    ui.allocate_exact_size(Vec2::new(FLYOUT_WIDTH - 46.0, 42.0), Sense::hover());
 
                 if !has_series {
                     self.hover_history_idx = None;

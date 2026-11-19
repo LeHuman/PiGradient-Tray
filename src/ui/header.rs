@@ -42,8 +42,8 @@ impl PiGradientApp {
         let header_resp = Frame::new()
             .fill(SURFACE_HEADER)
             .corner_radius(CornerRadius {
-                nw: 12,
-                ne: 12,
+                nw: 11,
+                ne: 11,
                 sw: 0,
                 se: 0,
             })

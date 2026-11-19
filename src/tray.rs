@@ -12,6 +12,7 @@ use crate::constants::{
 
 #[derive(Debug, Clone)]
 pub enum TrayAction {
+    TrayPointerDown(Option<Rect>),
     ToggleFlyout(Option<Rect>),
     OpenDashboard,
     OpenSettings,
@@ -133,33 +134,82 @@ fn glyph_3x7(ch: char) -> [u8; 7] {
     }
 }
 
-/// Renders a crisp 32x32 rounded square badge containing numeric AQI digits.
+fn srgb_channel_to_linear(c: u8) -> f32 {
+    let v = c as f32 / 255.0;
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Relative luminance (WCAG) of an sRGB colour, used to choose readable ink.
+fn relative_luminance((r, g, b): (u8, u8, u8)) -> f32 {
+    0.2126 * srgb_channel_to_linear(r)
+        + 0.7152 * srgb_channel_to_linear(g)
+        + 0.0722 * srgb_channel_to_linear(b)
+}
+
+fn contrast_ratio(a: f32, b: f32) -> f32 {
+    let (lighter, darker) = if a >= b { (a, b) } else { (b, a) };
+    (lighter + 0.05) / (darker + 0.05)
+}
+
+const INK_DARK: (u8, u8, u8) = (11, 18, 32); // #0B1220
+const INK_LIGHT: (u8, u8, u8) = (255, 255, 255);
+
+/// Picks whichever ink has the higher contrast against the badge fill.
+/// A fixed white would vanish on amber; a fixed dark would muddy deep reds.
+fn pick_ink(fill: (u8, u8, u8)) -> (u8, u8, u8) {
+    let fill_lum = relative_luminance(fill);
+    if contrast_ratio(fill_lum, relative_luminance(INK_DARK))
+        >= contrast_ratio(fill_lum, relative_luminance(INK_LIGHT))
+    {
+        INK_DARK
+    } else {
+        INK_LIGHT
+    }
+}
+
+/// Renders a 32x32 rounded square badge filled with the status colour and
+/// containing numeric AQI digits.
+///
+/// The whole badge is filled rather than outlined: at 16x16 DIP a 2px outline
+/// downsamples into a hollow box. Corners are antialiased via a rounded-box
+/// SDF, and the digits use whichever ink contrasts with the fill.
 /// Uses 5x7 @2x (10x14) for 1-2 chars and 3x7 @2x (6x14) for 3 chars so >99
 /// stays full-height with 2px strokes when Windows downsamples to 16x16 DIP.
 pub fn render_aqi_digits_rgba(badge_hex: &str, text: &str) -> Vec<u8> {
     let size = TRAY_ICON_SIZE;
     let mut rgba = vec![0u8; size * size * 4];
-    let (ar, ag, ab) = parse_hex_rgb(badge_hex);
+    let (fr, fg, fb) = parse_hex_rgb(badge_hex);
+    let (ir, ig, ib) = pick_ink((fr, fg, fb));
+
+    // Rounded-box signed distance field: 1px inset from the canvas edge, 7px
+    // corner radius, one pixel of feathered edge.
+    let center = size as f32 / 2.0;
+    let half = center - 1.0;
+    let radius = 7.0f32;
+    let feather = 0.5;
 
     for y in 0..size {
         for x in 0..size {
-            let idx = (y * size + x) * 4;
-            let in_corner = (x < 4 || x >= size - 4) && (y < 4 || y >= size - 4);
-            if in_corner {
+            let px = x as f32 + 0.5 - center;
+            let py = y as f32 + 0.5 - center;
+            let qx = px.abs() - (half - radius);
+            let qy = py.abs() - (half - radius);
+            let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let inside = qx.max(qy).min(0.0);
+            let distance = outside + inside - radius;
+            let coverage = (feather - distance).clamp(0.0, 1.0);
+            if coverage <= 0.0 {
                 continue;
             }
-            let is_border = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
-            if is_border {
-                rgba[idx] = ar;
-                rgba[idx + 1] = ag;
-                rgba[idx + 2] = ab;
-                rgba[idx + 3] = 255;
-            } else {
-                rgba[idx] = 24;
-                rgba[idx + 1] = 27;
-                rgba[idx + 2] = 34;
-                rgba[idx + 3] = 255;
-            }
+            let idx = (y * size + x) * 4;
+            rgba[idx] = fr;
+            rgba[idx + 1] = fg;
+            rgba[idx + 2] = fb;
+            rgba[idx + 3] = (coverage * 255.0).round() as u8;
         }
     }
 
@@ -169,10 +219,11 @@ pub fn render_aqi_digits_rgba(badge_hex: &str, text: &str) -> Vec<u8> {
     let cols = if compact { 3usize } else { 5usize };
     let glyph_w = cols * scale;
     let glyph_h = 7 * scale;
-    let gap = 2usize;
+    let gap = if chars.len() == 2 { 4usize } else { 2usize };
     let total_w = chars.len() * glyph_w + chars.len().saturating_sub(1) * gap;
-    let start_x = (size.saturating_sub(total_w)) / 2;
-    let start_y = (size.saturating_sub(glyph_h)) / 2;
+    // Snap to even coordinates so 2px strokes align cleanly to 16x16 DIP pixels.
+    let start_x = ((size.saturating_sub(total_w)) / 2) & !1;
+    let start_y = ((size.saturating_sub(glyph_h)) / 2) & !1;
 
     for (ci, ch) in chars.iter().enumerate() {
         let rows = if compact {
@@ -190,10 +241,11 @@ pub fn render_aqi_digits_rgba(badge_hex: &str, text: &str) -> Vec<u8> {
                             let py = start_y + ry * scale + sy;
                             if px < size && py < size {
                                 let idx = (py * size + px) * 4;
-                                rgba[idx] = 255;
-                                rgba[idx + 1] = 255;
-                                rgba[idx + 2] = 255;
-                                rgba[idx + 3] = 255;
+                                if rgba[idx + 3] > 0 {
+                                    rgba[idx] = ir;
+                                    rgba[idx + 1] = ig;
+                                    rgba[idx + 2] = ib;
+                                }
                             }
                         }
                     }
@@ -297,17 +349,31 @@ impl TrayController {
 
         let tx_click = action_tx.clone();
         let ctx_click = egui_ctx.clone();
-        TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
-            if let TrayIconEvent::Click {
+        TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Down,
+                rect,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                rect,
+                ..
+            } => {
+                let _ = tx_click.send(TrayAction::TrayPointerDown(Some(rect)));
+                ctx_click.request_repaint();
+            }
+            TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 rect,
                 ..
-            } = event
-            {
+            } => {
                 let _ = tx_click.send(TrayAction::ToggleFlyout(Some(rect)));
                 ctx_click.request_repaint();
             }
+            _ => {}
         }));
 
         let tx_menu = action_tx;
@@ -491,16 +557,61 @@ mod tests {
     }
 
     #[test]
-    fn renders_three_digit_aqi_badge_without_clipping() {
-        let rgba = render_aqi_digits_rgba("#F43F5E", "145");
+    fn renders_filled_badge_with_transparent_corners() {
+        let rgba = render_aqi_digits_rgba("#10B981", "42");
         assert_eq!(rgba.len(), 32 * 32 * 4);
-        let white_pixels = rgba
+        let px = |x: usize, y: usize| {
+            let i = (y * 32 + x) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        // Outside the rounded square: fully transparent, no grey box corner.
+        assert_eq!(px(0, 0)[3], 0);
+        assert_eq!(px(31, 31)[3], 0);
+        // Edge midpoints are solidly filled with the status colour.
+        assert_eq!(px(16, 1), [0x10, 0xB9, 0x81, 255]);
+        assert_eq!(px(1, 16), [0x10, 0xB9, 0x81, 255]);
+        // The interior is filled too, not a dark bezel.
+        assert_eq!(px(16, 4), [0x10, 0xB9, 0x81, 255]);
+    }
+
+    #[test]
+    fn picks_readable_ink_for_each_fill() {
+        // Bright fills get dark ink, dark fills keep white ink.
+        assert_eq!(pick_ink((0xF5, 0x9E, 0x0B)), INK_DARK);
+        assert_eq!(pick_ink((0x64, 0x74, 0x8B)), INK_LIGHT);
+    }
+
+    #[test]
+    fn renders_three_digit_aqi_digits_in_contrasting_ink() {
+        let rgba = render_aqi_digits_rgba("#F59E0B", "145");
+        let ink_pixels = rgba
             .as_chunks::<4>()
             .0
             .iter()
-            .filter(|px| px[0] == 255 && px[1] == 255 && px[2] == 255 && px[3] == 255)
+            .filter(|px| (px[0], px[1], px[2], px[3]) == (11, 18, 32, 255))
             .count();
-        assert!(white_pixels > 40);
+        assert!(ink_pixels > 40);
+    }
+
+    #[test]
+    fn renders_two_digit_aqi_digits_aligned_to_2x2_grid() {
+        let rgba = render_aqi_digits_rgba("#10B981", "15");
+        let is_ink = |x: usize, y: usize| {
+            let i = (y * 32 + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2]) == INK_DARK
+        };
+        for by in 0..16 {
+            for bx in 0..16 {
+                let c00 = is_ink(bx * 2, by * 2);
+                let c10 = is_ink(bx * 2 + 1, by * 2);
+                let c01 = is_ink(bx * 2, by * 2 + 1);
+                let c11 = is_ink(bx * 2 + 1, by * 2 + 1);
+                assert!(
+                    c00 == c10 && c00 == c01 && c00 == c11,
+                    "2x2 block ({bx},{by}) should be uniform for crisp 16x16 downsampling"
+                );
+            }
+        }
     }
 
     #[test]

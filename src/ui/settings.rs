@@ -113,7 +113,7 @@ impl PiGradientApp {
                                 .inner_margin(Margin::same(2))
                                 .show(ui, |ui| {
                                     ui.set_width(col_w - 6.0);
-                                    let seg_w = (col_w - 10.0) * 0.5;
+                                    let seg_w = (col_w - 8.0) * 0.5;
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
                                         for (code, label) in [("f", "°F"), ("c", "°C")] {
@@ -157,6 +157,7 @@ impl PiGradientApp {
                             );
                             let selected_label =
                                 format!("Every {}s", self.settings_form.idle_poll_seconds);
+                            ui.spacing_mut().interact_size.y = 32.0;
                             egui::ComboBox::from_id_salt("idle_poll_select")
                                 .width(col_w)
                                 .selected_text(
@@ -185,11 +186,11 @@ impl PiGradientApp {
                     .stroke(Stroke::new(1.0, border_subtle()))
                     .inner_margin(Margin::same(10))
                     .show(ui, |ui| {
-                        ui.set_width(FLYOUT_WIDTH - 44.0);
+                        ui.set_width(FLYOUT_WIDTH - 46.0);
                         ui.spacing_mut().item_spacing = Vec2::new(0.0, 10.0);
 
                         ui.horizontal(|ui| {
-                            ui.set_width(FLYOUT_WIDTH - 44.0);
+                            ui.set_width(FLYOUT_WIDTH - 46.0);
                             ui.label(
                                 RichText::new("Tray Icon Badge")
                                     .size(12.0)
@@ -237,7 +238,7 @@ impl PiGradientApp {
                         });
 
                         ui.horizontal(|ui| {
-                            ui.set_width(FLYOUT_WIDTH - 44.0);
+                            ui.set_width(FLYOUT_WIDTH - 46.0);
                             ui.label(
                                 RichText::new("Launch at Windows startup")
                                     .size(12.0)
@@ -265,43 +266,46 @@ impl PiGradientApp {
             .corner_radius(CornerRadius {
                 nw: 0,
                 ne: 0,
-                sw: 12,
-                se: 12,
+                sw: 11,
+                se: 11,
             })
             .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 24.0);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(FLYOUT_WIDTH - 24.0, 32.0),
+                    Layout::right_to_left(Align::Center),
+                    |ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-                    let save_btn = egui::Button::new(
-                        RichText::new("Save")
-                            .size(12.0)
-                            .strong()
-                            .color(Color32::WHITE),
-                    )
-                    .fill(ACCENT_PRIMARY)
-                    .stroke(Stroke::NONE)
-                    .corner_radius(CornerRadius::same(6))
-                    .min_size(Vec2::new(66.0, 32.0));
-                    if ui.add(save_btn).clicked() {
-                        self.submit_settings_form();
-                    }
+                        let save_btn = egui::Button::new(
+                            RichText::new("Save")
+                                .size(12.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .fill(ACCENT_PRIMARY)
+                        .stroke(Stroke::NONE)
+                        .corner_radius(CornerRadius::same(6))
+                        .min_size(Vec2::new(66.0, 32.0));
+                        if ui.add(save_btn).clicked() {
+                            self.submit_settings_form();
+                        }
 
-                    let cancel_btn = egui::Button::new(
-                        RichText::new("Cancel")
-                            .size(12.0)
-                            .strong()
-                            .color(TEXT_SECONDARY),
-                    )
-                    .fill(Color32::TRANSPARENT)
-                    .stroke(Stroke::NONE)
-                    .corner_radius(CornerRadius::same(6))
-                    .min_size(Vec2::new(62.0, 32.0));
-                    if ui.add(cancel_btn).clicked() {
-                        self.in_settings = false;
-                    }
-                });
+                        let cancel_btn = egui::Button::new(
+                            RichText::new("Cancel")
+                                .size(12.0)
+                                .strong()
+                                .color(TEXT_SECONDARY),
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .stroke(Stroke::NONE)
+                        .corner_radius(CornerRadius::same(6))
+                        .min_size(Vec2::new(62.0, 32.0));
+                        if ui.add(cancel_btn).clicked() {
+                            self.in_settings = false;
+                        }
+                    },
+                );
             });
     }
 }

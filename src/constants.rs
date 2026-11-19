@@ -1,4 +1,4 @@
-use eframe::egui::Color32;
+use eframe::egui::{Color32, Pos2};
 
 // -----------------------------------------------------------------------------
 // Application Identity & Windows System Integration
@@ -44,7 +44,20 @@ pub const BACKOFF_MAX_SECS: u64 = 15;
 // -----------------------------------------------------------------------------
 
 pub const FLYOUT_WIDTH: f32 = 360.0;
-pub const FLYOUT_INITIAL_HEIGHT: f32 = 398.0;
+/// Stroke of the card frame. egui grows a `Frame` by its stroke size on every
+/// side, so the window must include that growth or the right/bottom border is
+/// clipped by the swap-chain edge.
+pub const CARD_STROKE_WIDTH: f32 = 1.0;
+/// Transparent bleed around the card. Without it the card's anti-aliased edge
+/// and border land exactly on the swap-chain edge and read as "cut off".
+pub const CARD_BLEED: f32 = 1.0;
+/// Native window width = card content + border strokes + transparent bleed.
+pub const FLYOUT_OUTER_WIDTH: f32 = FLYOUT_WIDTH + 2.0 * CARD_STROKE_WIDTH + 2.0 * CARD_BLEED;
+/// Fixed KPI tile height, so cards in both rows read as matched pairs.
+pub const TILE_HEIGHT: f32 = 88.0;
+/// Where a hidden flyout is parked off every monitor so it stays mapped and warm.
+pub const PARKED_POS: Pos2 = Pos2::new(-32000.0, -32000.0);
+pub const FLYOUT_INITIAL_HEIGHT: f32 = 370.0;
 pub const FLYOUT_MIN_HEIGHT: f32 = 260.0;
 pub const FLYOUT_SHOW_MIN_HEIGHT: f32 = 300.0;
 pub const FLYOUT_SCREEN_MARGIN: f32 = 8.0;

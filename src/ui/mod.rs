@@ -14,8 +14,9 @@ use crate::config::{
     AppSettings, normalize_gateway_url, save_settings_to_disk, set_windows_startup,
 };
 use crate::constants::{
-    ACCENT_PRIMARY, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT, FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH,
-    FOCUS_LOSS_GRACE_MS, SURFACE_CARD, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
+    ACCENT_PRIMARY, CARD_BLEED, FLYOUT_INITIAL_HEIGHT, FLYOUT_MIN_HEIGHT, FLYOUT_OUTER_WIDTH,
+    FLYOUT_SHOW_MIN_HEIGHT, FLYOUT_WIDTH, FOCUS_LOSS_GRACE_MS, PARKED_POS, SURFACE_CARD,
+    SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
 };
 use crate::poller::{SharedAppState, TelemetrySnapshot};
 use crate::theme::{
@@ -27,19 +28,31 @@ use icons::draw_wifi_off_icon;
 use settings::SettingsFormState;
 use tiles::render_kpi_grid;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RevealPhase {
+    Hidden,
+    Settling,
+    ReadyToUncloak,
+    Shown,
+}
+
 pub struct PiGradientApp {
     state: Arc<SharedAppState>,
     tray: Option<TrayController>,
     tray_rx: std::sync::mpsc::Receiver<TrayAction>,
     visible: bool,
+    reveal_phase: RevealPhase,
     shown_at: Option<Instant>,
     seen_focused_while_shown: bool,
+    hidden_by_blur_at: Option<Instant>,
+    suppress_next_tray_up: bool,
     pub(super) in_settings: bool,
     pub(super) settings_form: SettingsFormState,
     last_tray_rect: Option<tray_icon::Rect>,
     last_viewport_height: f32,
     pub(super) hover_history_idx: Option<usize>,
     should_quit: bool,
+    parked: bool,
 }
 
 impl PiGradientApp {
@@ -56,23 +69,23 @@ impl PiGradientApp {
             tray,
             tray_rx,
             visible: false,
+            reveal_phase: RevealPhase::Hidden,
             shown_at: None,
             seen_focused_while_shown: false,
+            hidden_by_blur_at: None,
+            suppress_next_tray_up: false,
             in_settings: false,
             settings_form: SettingsFormState::from(&initial_settings),
             last_tray_rect: None,
             last_viewport_height: FLYOUT_INITIAL_HEIGHT,
             hover_history_idx: None,
             should_quit: false,
+            parked: false,
         }
     }
 
-    fn position_and_show(&mut self, ctx: &egui::Context, rect_opt: Option<tray_icon::Rect>) {
-        if let Some(r) = rect_opt {
-            self.last_tray_rect = Some(r);
-        }
+    fn current_flyout_pos(&self, ctx: &egui::Context, height: f32) -> egui::Pos2 {
         let ppp = ctx.pixels_per_point();
-        let target_h = self.last_viewport_height.max(FLYOUT_SHOW_MIN_HEIGHT);
         let wa = if let Some(r) = self.last_tray_rect {
             work_area_for_point(
                 r.position.x as i32 + (r.size.width as i32 / 2),
@@ -81,29 +94,60 @@ impl PiGradientApp {
         } else {
             work_area_for_point(1900, 1060)
         };
-        let pos = compute_flyout_logical_pos(self.last_tray_rect, FLYOUT_WIDTH, target_h, ppp, wa);
+        compute_flyout_logical_pos(self.last_tray_rect, FLYOUT_OUTER_WIDTH, height, ppp, wa)
+    }
 
+    fn position_and_show(&mut self, ctx: &egui::Context, rect_opt: Option<tray_icon::Rect>) {
+        if let Some(r) = rect_opt {
+            self.last_tray_rect = Some(r);
+        }
+
+        if self.reveal_phase == RevealPhase::Shown {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            self.shown_at = Some(Instant::now());
+            self.seen_focused_while_shown = false;
+            return;
+        }
+
+        let target_h = self.last_viewport_height.max(FLYOUT_SHOW_MIN_HEIGHT);
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
-            FLYOUT_WIDTH,
+            FLYOUT_OUTER_WIDTH,
             target_h,
         )));
-        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 
+        // Stay parked + DWM-cloaked until `App::ui` settles `measured_h` and
+        // paints a frame at the final size, avoiding resize jumps and flashes.
         self.visible = true;
-        self.shown_at = Some(Instant::now());
+        self.reveal_phase = RevealPhase::Settling;
+        self.shown_at = None;
         self.seen_focused_while_shown = false;
         self.state.set_flyout_visible(true);
+        ctx.request_repaint();
     }
 
     pub(super) fn hide_flyout(&mut self, ctx: &egui::Context) {
         self.visible = false;
+        self.reveal_phase = RevealPhase::Hidden;
         self.shown_at = None;
         self.seen_focused_while_shown = false;
         self.hover_history_idx = None;
         self.state.set_flyout_visible(false);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        self.park_window(ctx);
+        ctx.request_repaint();
+    }
+
+    /// Hides the flyout by moving it off every monitor instead of unmapping it.
+    ///
+    /// ShowWindow-driven hide/show makes DWM play its window animation and
+    /// present an uninitialized swap chain on the next map, which is the white
+    /// flash on every tray click. A mapped-but-parked window has neither: the
+    /// GL surface stays warm, and being off-screen it cannot swallow clicks.
+    fn park_window(&mut self, ctx: &egui::Context) {
+        if self.parked {
+            return;
+        }
+        self.parked = true;
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(PARKED_POS));
     }
 
     fn toggle_flyout(&mut self, ctx: &egui::Context, rect_opt: Option<tray_icon::Rect>) {
@@ -243,7 +287,7 @@ impl PiGradientApp {
             .stroke(Stroke::new(1.0, border_subtle()))
             .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 44.0);
+                ui.set_width(FLYOUT_WIDTH - 46.0);
                 ui.horizontal(|ui| {
                     ui.allocate_ui_with_layout(
                         Vec2::new(242.0, 32.0),
@@ -294,7 +338,7 @@ impl PiGradientApp {
             .stroke(Stroke::new(1.0, border_subtle()))
             .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 44.0);
+                ui.set_width(FLYOUT_WIDTH - 46.0);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
@@ -302,7 +346,7 @@ impl PiGradientApp {
                     draw_wifi_off_icon(ui.painter(), icon_rect.center(), TEXT_MUTED);
 
                     ui.allocate_ui_with_layout(
-                        Vec2::new(212.0, 32.0),
+                        Vec2::new(220.0, 32.0),
                         Layout::top_down(Align::Min),
                         |ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(0.0, 2.0);
@@ -337,7 +381,7 @@ impl PiGradientApp {
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let retry_btn = egui::Button::new(
-                            RichText::new("↻ Retry").size(11.0).color(TEXT_PRIMARY),
+                            RichText::new("Retry").size(11.0).color(TEXT_PRIMARY),
                         )
                         .fill(hover_overlay())
                         .stroke(Stroke::NONE)
@@ -359,30 +403,25 @@ impl PiGradientApp {
         valid_telemetry: bool,
     ) {
         let device_meta = match (&snapshot.live, valid_telemetry) {
-            (Some(live), true)
-                if !live.device.model.is_empty() || !live.device.firmware.is_empty() =>
-            {
-                format!("{} · FW {}", live.device.model, live.device.firmware)
-            }
+            (Some(live), true) => format_device_meta(&live.device.model, &live.device.firmware),
             _ => "Read-only companion".to_string(),
         };
         let has_url = !settings.gateway_url.trim().is_empty();
+        let body_w = FLYOUT_WIDTH - 24.0;
+        let btn_w = 140.0;
+        let meta_w = body_w - btn_w - 8.0; // 188.0 px
 
         ui.horizontal(|ui| {
-            ui.set_width(FLYOUT_WIDTH - 24.0);
+            ui.set_width(body_w);
             ui.allocate_ui_with_layout(
-                Vec2::new(182.0, 32.0),
+                Vec2::new(meta_w, 30.0),
                 Layout::left_to_right(Align::Center),
                 |ui| {
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(device_meta)
-                                .size(11.0)
-                                .monospace()
-                                .color(TEXT_MUTED),
-                        )
-                        .truncate(),
-                    );
+                        egui::Label::new(RichText::new(&device_meta).size(10.5).color(TEXT_MUTED))
+                            .truncate(),
+                    )
+                    .on_hover_text(&device_meta);
                 },
             );
 
@@ -401,14 +440,14 @@ impl PiGradientApp {
 
                 let btn = egui::Button::new(
                     RichText::new("Open Web Dashboard ↗")
-                        .size(11.5)
+                        .size(11.0)
                         .strong()
                         .color(text_color),
                 )
                 .fill(fill)
                 .stroke(stroke)
                 .corner_radius(CornerRadius::same(6))
-                .min_size(Vec2::new(146.0, 32.0));
+                .min_size(Vec2::new(btn_w, 30.0));
 
                 if ui.add_enabled(has_url, btn).clicked() {
                     self.open_dashboard();
@@ -423,13 +462,50 @@ impl eframe::App for PiGradientApp {
         [0.0, 0.0, 0.0, 0.0]
     }
 
-    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // Runs even while the flyout is hidden, so the window is clean before
+        // it is ever shown.
+        crate::ensure_borderless_window_policy(frame);
+
+        if self.reveal_phase == RevealPhase::ReadyToUncloak {
+            crate::set_window_cloaked(frame, false);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            self.shown_at = Some(Instant::now());
+            self.seen_focused_while_shown = false;
+            self.reveal_phase = RevealPhase::Shown;
+        }
+
         // Keep tray visuals updated even while the flyout window stays hidden
         self.sync_tray_icon();
 
         while let Ok(action) = self.tray_rx.try_recv() {
             match action {
-                TrayAction::ToggleFlyout(rect) => self.toggle_flyout(ctx, rect),
+                TrayAction::TrayPointerDown(rect) => {
+                    if let Some(r) = rect {
+                        self.last_tray_rect = Some(r);
+                    }
+                    let just_blurred = self
+                        .hidden_by_blur_at
+                        .take()
+                        .is_some_and(|t| t.elapsed().as_millis() < 200);
+                    if self.visible || just_blurred {
+                        // Clicking the tray icon while open triggers taskbar focus
+                        // loss on mouse-down; consume the matching mouse-up so the
+                        // flyout closes cleanly instead of bouncing back open.
+                        self.suppress_next_tray_up = true;
+                        if self.visible {
+                            self.hide_flyout(ctx);
+                        }
+                    }
+                }
+                TrayAction::ToggleFlyout(rect) => {
+                    if rect.is_some() && self.suppress_next_tray_up {
+                        self.suppress_next_tray_up = false;
+                    } else {
+                        self.suppress_next_tray_up = false;
+                        self.toggle_flyout(ctx, rect);
+                    }
+                }
                 TrayAction::OpenDashboard => self.open_dashboard(),
                 TrayAction::OpenSettings => {
                     self.open_settings_view();
@@ -451,18 +527,21 @@ impl eframe::App for PiGradientApp {
 
         // Focus-loss auto-hide & Esc handling while flyout is shown
         if self.visible {
-            let focused = ctx.input(|i| i.viewport().focused);
-            if focused == Some(true) {
-                self.seen_focused_while_shown = true;
-            } else if focused == Some(false) {
-                let past_grace = self
-                    .shown_at
-                    .map(|t| t.elapsed().as_millis() > FOCUS_LOSS_GRACE_MS)
-                    .unwrap_or(false);
-                if (self.seen_focused_while_shown || past_grace)
-                    && !self.state.read_settings().pin_flyout
-                {
-                    self.hide_flyout(ctx);
+            if self.reveal_phase == RevealPhase::Shown {
+                let focused = ctx.input(|i| i.viewport().focused);
+                if focused == Some(true) {
+                    self.seen_focused_while_shown = true;
+                } else if focused == Some(false) {
+                    let past_grace = self
+                        .shown_at
+                        .map(|t| t.elapsed().as_millis() > FOCUS_LOSS_GRACE_MS)
+                        .unwrap_or(false);
+                    if (self.seen_focused_while_shown || past_grace)
+                        && !self.state.read_settings().pin_flyout
+                    {
+                        self.hidden_by_blur_at = Some(Instant::now());
+                        self.hide_flyout(ctx);
+                    }
                 }
             }
 
@@ -474,10 +553,18 @@ impl eframe::App for PiGradientApp {
                 }
             }
         }
+
+        // Cloak and park the window on startup (it is created mapped) and
+        // whenever it is logically hidden.
+        if !self.visible {
+            crate::set_window_cloaked(frame, true);
+            self.park_window(ctx);
+        }
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if !self.visible {
+            crate::set_window_cloaked(frame, true);
             return;
         }
 
@@ -501,12 +588,15 @@ impl eframe::App for PiGradientApp {
         let card_response = egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH);
+                ui.set_width(FLYOUT_OUTER_WIDTH);
                 Frame::new()
                     .fill(SURFACE_CARD)
                     .corner_radius(CornerRadius::same(12))
                     .stroke(Stroke::new(1.0, border_card()))
                     .inner_margin(Margin::same(0))
+                    // Keep the border and its anti-aliasing off the window's
+                    // swap-chain edge; the bleed is transparent.
+                    .outer_margin(Margin::same(CARD_BLEED as i8))
                     .show(ui, |ui| {
                         ui.set_width(FLYOUT_WIDTH);
                         ui.spacing_mut().item_spacing = Vec2::ZERO;
@@ -529,6 +619,11 @@ impl eframe::App for PiGradientApp {
                     })
             });
 
+        if !self.visible {
+            crate::set_window_cloaked(frame, true);
+            return;
+        }
+
         let measured_h = card_response
             .inner
             .response
@@ -538,22 +633,96 @@ impl eframe::App for PiGradientApp {
             .max(FLYOUT_MIN_HEIGHT);
         if (measured_h - self.last_viewport_height).abs() > 1.5 {
             self.last_viewport_height = measured_h;
-            let ppp = ctx.pixels_per_point();
-            let wa = if let Some(r) = self.last_tray_rect {
-                work_area_for_point(
-                    r.position.x as i32 + (r.size.width as i32 / 2),
-                    r.position.y as i32 + (r.size.height as i32 / 2),
-                )
-            } else {
-                work_area_for_point(1900, 1060)
-            };
-            let pos =
-                compute_flyout_logical_pos(self.last_tray_rect, FLYOUT_WIDTH, measured_h, ppp, wa);
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
-                FLYOUT_WIDTH,
+                FLYOUT_OUTER_WIDTH,
                 measured_h,
             )));
+            if self.reveal_phase == RevealPhase::Shown {
+                let pos = self.current_flyout_pos(&ctx, measured_h);
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            } else {
+                self.reveal_phase = RevealPhase::Settling;
+                ctx.request_repaint();
+            }
+        } else if self.reveal_phase == RevealPhase::Settling {
+            let pos = self.current_flyout_pos(&ctx, self.last_viewport_height);
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            self.parked = false;
+            self.reveal_phase = RevealPhase::ReadyToUncloak;
+            ctx.request_repaint();
         }
+    }
+}
+
+/// Maps AirGradient SKU codes to readable product labels while keeping the
+/// gateway-reported raw model code intact (never inventing `-DE` or suffixes).
+fn model_family_label(model: &str) -> Option<&'static str> {
+    match model.trim() {
+        "I-9PSL" => Some("ONE Indoor"),
+        "I-9PSL-CE" => Some("ONE Cell"),
+        "I-9PSL-DE" | "I-9PSL-DE_kit" | "I-9PSL-DE_asd" => Some("ONE DIY"),
+        "I-9PSL-DE-CE" => Some("ONE DIY Cell"),
+        "O-1PST" | "O-1PST-CE" | "O-1S-CE" => Some("Open Air"),
+        _ => None,
+    }
+}
+
+fn friendly_model_name(model: &str) -> String {
+    let raw = model.trim();
+    if raw.is_empty() {
+        return String::new();
+    }
+    match model_family_label(raw) {
+        Some(family) => format!("{raw} · {family}"),
+        None => raw.to_string(),
+    }
+}
+
+fn format_device_meta(model: &str, firmware: &str) -> String {
+    let model = friendly_model_name(model);
+    let firmware = firmware.trim();
+    match (model.is_empty(), firmware.is_empty()) {
+        (false, false) => format!("{model} · FW {firmware}"),
+        (false, true) => model,
+        (true, false) => format!("FW {firmware}"),
+        (true, true) => "Read-only companion".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_known_airgradient_models_and_keeps_raw_codes() {
+        assert_eq!(friendly_model_name("I-9PSL"), "I-9PSL · ONE Indoor");
+        assert_eq!(friendly_model_name(" I-9PSL-DE "), "I-9PSL-DE · ONE DIY");
+        assert_eq!(
+            friendly_model_name("I-9PSL-DE_kit"),
+            "I-9PSL-DE_kit · ONE DIY"
+        );
+        assert_eq!(
+            friendly_model_name("I-9PSL-DE_asd"),
+            "I-9PSL-DE_asd · ONE DIY"
+        );
+        assert_eq!(friendly_model_name("I-9PSL-CE"), "I-9PSL-CE · ONE Cell");
+        assert_eq!(friendly_model_name("O-1PST-CE"), "O-1PST-CE · Open Air");
+        assert_eq!(friendly_model_name("X-42"), "X-42");
+        assert_eq!(friendly_model_name(""), "");
+    }
+
+    #[test]
+    fn formats_device_meta_without_fabricating_missing_parts() {
+        assert_eq!(
+            format_device_meta("I-9PSL", "3.7.1"),
+            "I-9PSL · ONE Indoor · FW 3.7.1"
+        );
+        assert_eq!(
+            format_device_meta("I-9PSL-DE", "3.7.1"),
+            "I-9PSL-DE · ONE DIY · FW 3.7.1"
+        );
+        assert_eq!(format_device_meta("I-9PSL", ""), "I-9PSL · ONE Indoor");
+        assert_eq!(format_device_meta("", "3.7.1"), "FW 3.7.1");
+        assert_eq!(format_device_meta("", ""), "Read-only companion");
     }
 }
