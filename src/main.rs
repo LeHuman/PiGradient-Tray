@@ -373,6 +373,26 @@ pub(crate) fn focus_flyout_window(frame: &eframe::Frame) {
 #[cfg(not(windows))]
 pub(crate) fn focus_flyout_window(_frame: &eframe::Frame) {}
 
+/// Whether this window actually owns the Win32 foreground.
+///
+/// egui's `viewport().focused` is only as good as the windowing layer's own
+/// bookkeeping, and eframe creates the window with `with_visible(false)`, so
+/// that flag can stay `false` while Windows has long since handed us focus.
+/// The foreground window is the source of truth for the click-away guard.
+#[cfg(windows)]
+pub(crate) fn flyout_has_foreground(frame: &eframe::Frame) -> Option<bool> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let hwnd = hwnd_from_frame(frame)?;
+    let foreground = unsafe { GetForegroundWindow() };
+    Some(foreground == hwnd)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn flyout_has_foreground(_frame: &eframe::Frame) -> Option<bool> {
+    None
+}
+
 /// Moves the parked flyout to its final physical position and uncloaks it in a
 /// single tick, reusing the frame it already painted while hidden.
 ///

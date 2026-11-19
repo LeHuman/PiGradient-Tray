@@ -297,20 +297,28 @@ impl PiGradientApp {
         show_setup_prompt: bool,
         show_offline_prompt: bool,
     ) {
-        Frame::new().inner_margin(Margin::same(12)).show(ui, |ui| {
-            ui.set_width(FLYOUT_WIDTH - 24.0);
-            ui.spacing_mut().item_spacing = Vec2::new(8.0, 10.0);
+        Frame::new()
+            .inner_margin(Margin {
+                left: 12,
+                right: 12,
+                top: 12,
+                bottom: 9,
+            })
+            .show(ui, |ui| {
+                ui.set_width(FLYOUT_WIDTH - 24.0);
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 10.0);
 
-            if show_setup_prompt {
-                self.render_setup_banner(ui);
-            } else if show_offline_prompt {
-                self.render_offline_banner(ui, snapshot, settings);
-            }
+                if show_setup_prompt {
+                    self.render_setup_banner(ui);
+                } else if show_offline_prompt {
+                    self.render_offline_banner(ui, snapshot, settings);
+                }
 
-            render_kpi_grid(ui, snapshot, settings, valid_telemetry);
-            self.render_sparkline_card(ui, &snapshot.history, valid_telemetry);
-            self.render_footer(ui, snapshot, settings, valid_telemetry);
-        });
+                render_kpi_grid(ui, snapshot, settings, valid_telemetry);
+                ui.spacing_mut().item_spacing.y = 8.0;
+                self.render_sparkline_card(ui, &snapshot.history, valid_telemetry);
+                self.render_footer(ui, snapshot, valid_telemetry);
+            });
     }
 
     fn render_setup_banner(&mut self, ui: &mut egui::Ui) {
@@ -432,61 +440,25 @@ impl PiGradientApp {
         &self,
         ui: &mut egui::Ui,
         snapshot: &TelemetrySnapshot,
-        settings: &AppSettings,
         valid_telemetry: bool,
     ) {
         let device_meta = match (&snapshot.live, valid_telemetry) {
             (Some(live), true) => format_device_meta(&live.device.model, &live.device.firmware),
             _ => "Read-only companion".to_string(),
         };
-        let has_url = !settings.gateway_url.trim().is_empty();
         let body_w = FLYOUT_WIDTH - 24.0;
-        let btn_w = 140.0;
-        let meta_w = body_w - btn_w - 8.0; // 188.0 px
 
-        ui.horizontal(|ui| {
-            ui.set_width(body_w);
-            ui.allocate_ui_with_layout(
-                Vec2::new(meta_w, 30.0),
-                Layout::left_to_right(Align::Center),
-                |ui| {
-                    ui.add(
-                        egui::Label::new(RichText::new(&device_meta).size(10.5).color(TEXT_MUTED))
-                            .truncate(),
-                    )
-                    .on_hover_text(&device_meta);
-                },
-            );
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let fill = if has_url {
-                    ACCENT_PRIMARY
-                } else {
-                    SURFACE_TILE
-                };
-                let stroke = if has_url {
-                    Stroke::NONE
-                } else {
-                    Stroke::new(1.0, border_subtle())
-                };
-                let text_color = if has_url { Color32::WHITE } else { TEXT_MUTED };
-
-                let btn = egui::Button::new(
-                    RichText::new("Open Web Dashboard ↗")
-                        .size(11.0)
-                        .strong()
-                        .color(text_color),
+        ui.allocate_ui_with_layout(
+            Vec2::new(body_w, 16.0),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.add(
+                    egui::Label::new(RichText::new(&device_meta).size(10.5).color(TEXT_MUTED))
+                        .truncate(),
                 )
-                .fill(fill)
-                .stroke(stroke)
-                .corner_radius(CornerRadius::same(6))
-                .min_size(Vec2::new(btn_w, 30.0));
-
-                if ui.add_enabled(has_url, btn).clicked() {
-                    self.open_dashboard();
-                }
-            });
-        });
+                .on_hover_text(&device_meta);
+            },
+        );
     }
 }
 
@@ -580,7 +552,8 @@ impl eframe::App for PiGradientApp {
         // Focus-loss auto-hide & Esc handling while flyout is shown
         if self.visible {
             if self.reveal_phase == RevealPhase::Shown {
-                let focused = ctx.input(|i| i.viewport().focused);
+                let focused = crate::flyout_has_foreground(frame)
+                    .or_else(|| ctx.input(|i| i.viewport().focused));
                 if focused == Some(true) {
                     self.seen_focused_while_shown = true;
                 } else if focused == Some(false) {

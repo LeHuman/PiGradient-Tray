@@ -49,109 +49,112 @@ impl PiGradientApp {
             })
             .inner_margin(Margin::symmetric(12, 8))
             .show(ui, |ui| {
-                ui.set_width(FLYOUT_WIDTH - 24.0);
-                ui.set_height(28.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(FLYOUT_WIDTH - 24.0, 28.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
 
-                    // Left status badge + title
-                    let (dot_rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
-                    ui.painter()
-                        .circle_filled(dot_rect.center(), 5.0, badge_color);
-                    ui.painter().circle_stroke(
-                        dot_rect.center(),
-                        5.0,
-                        Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 38)),
-                    );
+                        // Left status badge + title
+                        let (dot_rect, _) =
+                            ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+                        ui.painter()
+                            .circle_filled(dot_rect.center(), 5.0, badge_color);
+                        ui.painter().circle_stroke(
+                            dot_rect.center(),
+                            5.0,
+                            Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 38)),
+                        );
 
-                    ui.label(
-                        RichText::new("PiGradient")
-                            .size(13.0)
-                            .strong()
-                            .color(Color32::WHITE),
-                    );
-                    ui.label(RichText::new("·").size(11.0).color(TEXT_MUTED));
-                    ui.add(
-                        egui::Label::new(RichText::new(status_label).size(11.0).color(
-                            if is_live {
-                                TEXT_PRIMARY
-                            } else {
-                                TEXT_SECONDARY
-                            },
-                        ))
-                        .truncate(),
-                    );
+                        ui.label(
+                            RichText::new("PiGradient")
+                                .size(13.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        );
+                        ui.label(RichText::new("·").size(11.0).color(TEXT_MUTED));
+                        ui.add(
+                            egui::Label::new(RichText::new(status_label).size(11.0).color(
+                                if is_live {
+                                    TEXT_PRIMARY
+                                } else {
+                                    TEXT_SECONDARY
+                                },
+                            ))
+                            .truncate(),
+                        );
 
-                    // Right action buttons
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
+                        // Right action buttons
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
 
-                        if header_icon_button(
-                            ui,
-                            HeaderIconKind::Close,
-                            false,
-                            true,
-                            "Hide flyout (Esc)",
-                        )
-                        .clicked()
-                        {
-                            self.hide_flyout(ctx);
-                        }
-
-                        if header_icon_button(
-                            ui,
-                            HeaderIconKind::Settings,
-                            self.in_settings,
-                            true,
-                            if self.in_settings {
-                                "Back to telemetry"
-                            } else {
-                                "Settings"
-                            },
-                        )
-                        .clicked()
-                        {
-                            if self.in_settings {
-                                self.in_settings = false;
-                            } else {
-                                self.open_settings_view();
+                            if header_icon_button(
+                                ui,
+                                HeaderIconKind::Close,
+                                false,
+                                true,
+                                "Hide flyout (Esc)",
+                            )
+                            .clicked()
+                            {
+                                self.hide_flyout(ctx);
                             }
-                        }
 
-                        if header_icon_button(
-                            ui,
-                            HeaderIconKind::Pin(settings.pin_flyout),
-                            settings.pin_flyout,
-                            true,
-                            if settings.pin_flyout {
-                                "Unpin flyout (auto-hide on blur)"
-                            } else {
-                                "Pin flyout open"
-                            },
-                        )
-                        .clicked()
-                        {
-                            self.toggle_pin();
-                        }
+                            if header_icon_button(
+                                ui,
+                                HeaderIconKind::Settings,
+                                self.in_settings,
+                                true,
+                                if self.in_settings {
+                                    "Back to telemetry"
+                                } else {
+                                    "Settings"
+                                },
+                            )
+                            .clicked()
+                            {
+                                if self.in_settings {
+                                    self.in_settings = false;
+                                } else {
+                                    self.open_settings_view();
+                                }
+                            }
 
-                        if header_icon_button(
-                            ui,
-                            HeaderIconKind::ExternalLink,
-                            false,
-                            has_url,
-                            if has_url {
-                                "Open PiGradient Web Dashboard"
-                            } else {
-                                "Set Gateway URL first"
-                            },
-                        )
-                        .clicked()
-                            && has_url
-                        {
-                            self.open_dashboard();
-                        }
-                    });
-                });
+                            if header_icon_button(
+                                ui,
+                                HeaderIconKind::Pin(settings.pin_flyout),
+                                settings.pin_flyout,
+                                true,
+                                if settings.pin_flyout {
+                                    "Unpin flyout (auto-hide on blur)"
+                                } else {
+                                    "Pin flyout open"
+                                },
+                            )
+                            .clicked()
+                            {
+                                self.toggle_pin();
+                            }
+
+                            if header_icon_button(
+                                ui,
+                                HeaderIconKind::ExternalLink,
+                                false,
+                                has_url,
+                                if has_url {
+                                    "Open PiGradient Web Dashboard"
+                                } else {
+                                    "Set Gateway URL first"
+                                },
+                            )
+                            .clicked()
+                                && has_url
+                            {
+                                self.open_dashboard();
+                            }
+                        });
+                    },
+                );
             });
 
         // Bottom hairline divider
