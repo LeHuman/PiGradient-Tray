@@ -12,7 +12,7 @@ use crate::theme::border_subtle;
 
 use super::PiGradientApp;
 
-pub(super) struct SettingsFormState {
+pub(crate) struct SettingsFormState {
     pub gateway_url: String,
     pub temp_unit: String,
     pub idle_poll_seconds: u64,

@@ -491,13 +491,13 @@ mod tests {
 
     #[test]
     fn handles_partial_gateway_payload_without_crashing() {
-        let json = r#"{
+        let json = r##"{
             "status": "online",
             "timestamp": 1700000000,
             "device": { "model": "ONE_INDOOR" },
             "raw": { "rco2": 620 },
             "processed": { "aqi_pm25": 18, "aqi_color": "#10B981" }
-        }"#;
+        }"##;
         let live: LivePayload = serde_json::from_str(json).expect("partial payload parses");
         assert_eq!(live.device.model, "ONE_INDOOR");
         assert_eq!(live.device.firmware, "");

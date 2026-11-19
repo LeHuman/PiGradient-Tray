@@ -200,7 +200,7 @@ pub fn configure_fonts_and_style(ctx: &egui::Context) {
 
     ctx.set_fonts(fonts);
 
-    ctx.style_mut(|style| {
+    ctx.all_styles_mut(|style| {
         let mut visuals = egui::Visuals::dark();
         visuals.panel_fill = Color32::TRANSPARENT;
         visuals.window_fill = SURFACE_TILE;

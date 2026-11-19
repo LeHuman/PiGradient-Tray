@@ -23,11 +23,10 @@ use crate::ui::PiGradientApp;
 fn spawn_windows_power_listener(wake_notify: Arc<tokio::sync::Notify>) {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::System::Power::PBT_APMRESUMEAUTOMATIC;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, MSG, WINDOW_EX_STYLE, WM_POWERBROADCAST,
-        WNDCLASSW, WS_OVERLAPPED,
+        TranslateMessage, CS_HREDRAW, CS_VREDRAW, MSG, PBT_APMRESUMEAUTOMATIC, WINDOW_EX_STYLE,
+        WM_POWERBROADCAST, WNDCLASSW, WS_OVERLAPPED,
     };
 
     std::thread::spawn(move || unsafe {
