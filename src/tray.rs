@@ -517,18 +517,39 @@ pub fn compute_flyout_logical_pos(
     let wa_bottom = work_area_phys.bottom as f32 / ppp;
 
     let (raw_x, raw_y) = if let Some(rect) = tray_rect {
-        let icon_center_x = (rect.position.x as f32 + rect.size.width as f32 * 0.5) / ppp;
+        let icon_left = rect.position.x as f32 / ppp;
         let icon_top = rect.position.y as f32 / ppp;
+        let icon_right = (rect.position.x as f32 + rect.size.width as f32) / ppp;
         let icon_bottom = (rect.position.y as f32 + rect.size.height as f32) / ppp;
+        let icon_center_x = (icon_left + icon_right) * 0.5;
+        let icon_center_y = (icon_top + icon_bottom) * 0.5;
 
-        let x = icon_center_x - flyout_logical_w * 0.5;
-        // If tray icon sits near top taskbar, anchor below it; otherwise above it.
-        let y = if icon_top < wa_top + 64.0 {
-            icon_bottom + margin
+        // The tray icon lives in the taskbar strip, which sits outside the
+        // monitor's work area. Which edge that strip is on tells us where the
+        // flyout goes: beside the icon for a vertical taskbar, above or below
+        // it for a horizontal one.
+        if icon_center_x < wa_left {
+            (icon_right + margin, icon_center_y - flyout_logical_h * 0.5)
+        } else if icon_center_x > wa_right {
+            (
+                icon_left - flyout_logical_w - margin,
+                icon_center_y - flyout_logical_h * 0.5,
+            )
+        } else if icon_center_y < wa_top {
+            (icon_center_x - flyout_logical_w * 0.5, icon_bottom + margin)
+        } else if icon_center_y > wa_bottom {
+            (
+                icon_center_x - flyout_logical_w * 0.5,
+                (wa_bottom - flyout_logical_h - margin).min(icon_top - flyout_logical_h - margin),
+            )
         } else {
-            (wa_bottom - flyout_logical_h - margin).min(icon_top - flyout_logical_h - margin)
-        };
-        (x, y)
+            // Icon reported inside the work area (auto-hidden or floating
+            // taskbar): prefer the usual above-the-icon placement.
+            (
+                icon_center_x - flyout_logical_w * 0.5,
+                (wa_bottom - flyout_logical_h - margin).min(icon_top - flyout_logical_h - margin),
+            )
+        }
     } else {
         (
             wa_right - flyout_logical_w - margin,
@@ -547,6 +568,47 @@ pub fn compute_flyout_logical_pos(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn anchors_beside_the_icon_on_vertical_taskbars() {
+        let work = PhysicalRect {
+            left: 0,
+            top: 0,
+            right: 1900,
+            bottom: 1032,
+        };
+        // Right-hand taskbar: icon sits past the work area's right edge.
+        let icon = Rect {
+            position: tray_icon::dpi::PhysicalPosition::new(1904.0, 500.0),
+            size: tray_icon::dpi::PhysicalSize::new(16, 24),
+        };
+        let pos = compute_flyout_logical_pos(Some(icon), 360.0, 396.0, 1.0, work);
+        assert!(
+            pos.x + 360.0 <= 1900.0 - 8.0 + 0.5,
+            "flyout overlaps taskbar: {}",
+            pos.x
+        );
+        assert!(pos.x >= 8.0);
+
+        // Left-hand taskbar: work area starts after the strip.
+        let work_left = PhysicalRect {
+            left: 40,
+            top: 0,
+            right: 1920,
+            bottom: 1032,
+        };
+        let icon_left = Rect {
+            position: tray_icon::dpi::PhysicalPosition::new(8.0, 500.0),
+            size: tray_icon::dpi::PhysicalSize::new(16, 24),
+        };
+        let pos = compute_flyout_logical_pos(Some(icon_left), 360.0, 396.0, 1.0, work_left);
+        assert!(
+            pos.x >= 40.0 + 8.0 - 0.5,
+            "flyout overlaps taskbar: {}",
+            pos.x
+        );
+        assert!(pos.x + 360.0 <= 1920.0);
+    }
 
     #[test]
     fn clamps_tooltip_at_127_chars() {
