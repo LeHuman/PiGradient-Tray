@@ -373,6 +373,47 @@ pub(crate) fn focus_flyout_window(frame: &eframe::Frame) {
 #[cfg(not(windows))]
 pub(crate) fn focus_flyout_window(_frame: &eframe::Frame) {}
 
+/// Moves the parked flyout to its final physical position and uncloaks it in a
+/// single tick, reusing the frame it already painted while hidden.
+///
+/// egui's `OuterPosition`/`Visible` commands are applied after the frame, so
+/// uncloaking alongside them would show the window at its parked coordinates
+/// first. Driving the HWND directly is what removes the extra vsyncs from the
+/// open path; the engine catches up with the new geometry on its next frame.
+#[cfg(windows)]
+pub(crate) fn reveal_flyout_at(frame: &eframe::Frame, x: f32, y: f32, width: f32, height: f32) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetWindowPos,
+    };
+
+    let Some(hwnd) = hwnd_from_frame(frame) else {
+        return;
+    };
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            x.round() as i32,
+            y.round() as i32,
+            width.round() as i32,
+            height.round() as i32,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+    set_window_cloaked(frame, false);
+    focus_flyout_window(frame);
+}
+
+#[cfg(not(windows))]
+pub(crate) fn reveal_flyout_at(
+    _frame: &eframe::Frame,
+    _x: f32,
+    _y: f32,
+    _width: f32,
+    _height: f32,
+) {
+}
+
 /// Controls DWM cloaking (`DWMWA_CLOAK`) so a mapped window can settle its
 /// size and swap buffers offscreen before DWM composites it onto the desktop.
 #[cfg(windows)]

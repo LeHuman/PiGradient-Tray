@@ -32,6 +32,9 @@ use tiles::render_kpi_grid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RevealPhase {
     Hidden,
+    /// Position and uncloak in one tick, reusing the frame the parked window
+    /// already painted.
+    RevealNow,
     Settling,
     ReadyToUncloak,
     Shown,
@@ -54,6 +57,11 @@ pub struct PiGradientApp {
     pub(super) hover_history_idx: Option<usize>,
     should_quit: bool,
     parked: bool,
+    /// Set once the flyout has actually painted a frame, so the parked
+    /// swap chain holds real content that can be revealed immediately.
+    painted_once: bool,
+    /// Logical position to reveal at, consumed on the next tick.
+    pending_reveal: Option<egui::Pos2>,
 }
 
 impl PiGradientApp {
@@ -82,6 +90,8 @@ impl PiGradientApp {
             hover_history_idx: None,
             should_quit: false,
             parked: false,
+            painted_once: false,
+            pending_reveal: None,
         }
     }
 
@@ -99,6 +109,15 @@ impl PiGradientApp {
     }
 
     fn position_and_show(&mut self, ctx: &egui::Context, rect_opt: Option<tray_icon::Rect>) {
+        self.show_flyout(ctx, rect_opt, false);
+    }
+
+    fn show_flyout(
+        &mut self,
+        ctx: &egui::Context,
+        rect_opt: Option<tray_icon::Rect>,
+        settle: bool,
+    ) {
         if let Some(r) = rect_opt {
             self.last_tray_rect = Some(r);
         }
@@ -111,18 +130,31 @@ impl PiGradientApp {
         }
 
         let target_h = self.last_viewport_height.max(FLYOUT_SHOW_MIN_HEIGHT);
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
-            FLYOUT_OUTER_WIDTH,
-            target_h,
-        )));
+        let pos = self.current_flyout_pos(ctx, target_h);
 
-        // Stay parked + DWM-cloaked until `App::ui` settles `measured_h` and
-        // paints a frame at the final size, avoiding resize jumps and flashes.
         self.visible = true;
-        self.reveal_phase = RevealPhase::Settling;
         self.shown_at = None;
         self.seen_focused_while_shown = false;
         self.state.set_flyout_visible(true);
+
+        // Fast path: the parked swap chain already holds a frame at exactly
+        // this size, so `logic` can move and uncloak the window in one tick
+        // instead of waiting for viewport commands to round-trip. Only taken
+        // once the window has painted at least once and the height is stable.
+        if cfg!(windows)
+            && !settle
+            && self.painted_once
+            && (target_h - self.last_viewport_height).abs() <= f32::EPSILON
+        {
+            self.pending_reveal = Some(pos);
+            self.reveal_phase = RevealPhase::RevealNow;
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
+                FLYOUT_OUTER_WIDTH,
+                target_h,
+            )));
+            self.reveal_phase = RevealPhase::Settling;
+        }
         ctx.request_repaint();
     }
 
@@ -468,6 +500,23 @@ impl eframe::App for PiGradientApp {
         // it is ever shown.
         crate::ensure_borderless_window_policy(frame);
 
+        if self.reveal_phase == RevealPhase::RevealNow {
+            if let Some(pos) = self.pending_reveal.take() {
+                let ppp = ctx.pixels_per_point();
+                crate::reveal_flyout_at(
+                    frame,
+                    pos.x * ppp,
+                    pos.y * ppp,
+                    FLYOUT_OUTER_WIDTH * ppp,
+                    self.last_viewport_height * ppp,
+                );
+            }
+            self.parked = false;
+            self.reveal_phase = RevealPhase::Shown;
+            self.shown_at = Some(Instant::now());
+            self.seen_focused_while_shown = false;
+        }
+
         if self.reveal_phase == RevealPhase::ReadyToUncloak {
             crate::set_window_cloaked(frame, false);
             crate::focus_flyout_window(frame);
@@ -511,7 +560,8 @@ impl eframe::App for PiGradientApp {
                 TrayAction::OpenDashboard => self.open_dashboard(),
                 TrayAction::OpenSettings => {
                     self.open_settings_view();
-                    self.position_and_show(ctx, None);
+                    // Content height changes with the view, so let it settle.
+                    self.show_flyout(ctx, None, true);
                 }
                 TrayAction::Quit => {
                     self.should_quit = true;
@@ -642,6 +692,7 @@ impl eframe::App for PiGradientApp {
             crate::set_window_cloaked(frame, true);
             return;
         }
+        self.painted_once = true;
 
         let measured_h = card_response
             .inner
