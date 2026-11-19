@@ -139,12 +139,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -n "${CARGO_REGISTRY_TOKEN:-}" ]; then
-            cargo publish -p pigradient-tray
-          else
-            echo "CARGO_REGISTRY_TOKEN not set; skipping crates.io publish."
-          fi
+      # Publishing is owned by cd.yml, which runs on the tag pushed above.
+      # Keeping it in both places made the second publish fail with
+      # "crate version already exists".
