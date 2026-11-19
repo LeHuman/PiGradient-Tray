@@ -1,0 +1,63 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - "[v]?[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release-windows:
+    name: Build & Publish Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p target/release-dist
+          cp target/release/pigradient-tray.exe target/release-dist/pigradient-tray-windows-x86_64.exe
+          (cd target/release-dist && sha256sum pigradient-tray-windows-x86_64.exe > pigradient-tray-windows-x86_64.exe.sha256)
+
+      - name: Upload GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release-dist/pigradient-tray-windows-x86_64.exe
+            target/release-dist/pigradient-tray-windows-x86_64.exe.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pigradient-tray-windows-x86_64
+          path: target/release-dist/
+
+      - name: Publish to crates.io
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            cargo publish -p pigradient-tray
+          else
+            echo "CARGO_REGISTRY_TOKEN not set; skipping crates.io publish."
+          fi

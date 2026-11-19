@@ -1,0 +1,52 @@
+[package]
+name = "pigradient-tray"
+version = "0.1.0"
+description = "Read-only PiGradient Companion Windows System Tray App & Widget Flyout"
+authors = ["PiGradient"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+keywords = ["airgradient", "air-quality", "system-tray", "windows", "pigradient"]
+categories = ["gui", "hardware-support"]
+exclude = [
+  "node_modules/",
+  ".aistudio/",
+  ".agents/",
+  ".github/",
+  ".vscode/",
+  "package.json",
+  "metadata.json",
+]
+
+[build-dependencies]
+winresource = "0.1"
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow"] }
+tray-icon = "0.26"
+single-instance = "0.3"
+open = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream"] }
+futures-util = "0.3"
+dirs = "7"
+chrono = "0.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["x11", "wayland"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Power",
+  "Win32_System_Registry",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -1,0 +1,8 @@
+{
+  "name": "PiGradient Tray",
+  "description": "Companion Windows 10/11 system tray app and taskbar-anchored widget flyout for PiGradient AirGradient ONE telemetry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
