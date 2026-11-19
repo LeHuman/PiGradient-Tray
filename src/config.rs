@@ -69,7 +69,15 @@ pub fn save_settings_to_disk(settings: &AppSettings) -> Result<(), String> {
     }
     let json =
         serde_json::to_string_pretty(settings).map_err(|e| format!("Serialize failed: {e}"))?;
-    fs::write(&path, json).map_err(|e| format!("Failed to write settings.json: {e}"))
+    // Write to a sibling temp file and rename it into place: a crash or power
+    // loss mid-write must not leave a truncated settings.json that the loader
+    // would silently replace with defaults.
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("Failed to write settings.json: {e}"))?;
+    fs::rename(&tmp, &path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("Failed to replace settings.json: {e}")
+    })
 }
 
 pub fn normalize_gateway_url(raw: &str) -> Result<String, String> {

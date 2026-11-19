@@ -222,20 +222,21 @@ impl PiGradientApp {
         save_settings_to_disk(&next)?;
 
         let prev_url = self.state.read_settings().gateway_url;
-        if let Ok(mut guard) = self.state.settings.write() {
+        {
+            let mut guard = self.state.write_settings();
             *guard = next.clone();
         }
         if next.gateway_url.trim().is_empty() {
-            if let Ok(mut snap) = self.state.snapshot.write() {
+            {
+                let mut snap = self.state.write_snapshot();
                 snap.connection_state = "unconfigured".to_string();
                 snap.live = None;
                 snap.widget = None;
                 snap.history.clear();
                 snap.last_error = None;
             }
-        } else if prev_url != next.gateway_url
-            && let Ok(mut snap) = self.state.snapshot.write()
-        {
+        } else if prev_url != next.gateway_url {
+            let mut snap = self.state.write_snapshot();
             snap.connection_state = "connecting".to_string();
             snap.live = None;
             snap.widget = None;
@@ -251,7 +252,8 @@ impl PiGradientApp {
         let mut current = self.state.read_settings();
         current.pin_flyout = !current.pin_flyout;
         let _ = save_settings_to_disk(&current);
-        if let Ok(mut guard) = self.state.settings.write() {
+        {
+            let mut guard = self.state.write_settings();
             *guard = current;
         }
     }
@@ -392,14 +394,11 @@ impl PiGradientApp {
                             } else {
                                 "Waiting for monitor telemetry"
                             };
-                            let sub = match snapshot.live.as_ref() {
-                                Some(live) if live.last_seen_seconds_ago >= 0 => {
-                                    format!(
-                                        "Last seen {}",
-                                        format_relative_time(live.last_seen_seconds_ago)
-                                    )
+                            let sub = match snapshot.effective_last_seen_seconds() {
+                                Some(seen_sec) => {
+                                    format!("Last seen {}", format_relative_time(seen_sec))
                                 }
-                                _ => settings.gateway_url.clone(),
+                                None => settings.gateway_url.clone(),
                             };
                             ui.add(
                                 egui::Label::new(
@@ -516,7 +515,7 @@ impl eframe::App for PiGradientApp {
                     let just_blurred = self
                         .hidden_by_blur_at
                         .take()
-                        .is_some_and(|t| t.elapsed().as_millis() < 200);
+                        .is_some_and(|t| t.elapsed().as_millis() < FOCUS_LOSS_GRACE_MS);
                     if self.visible || just_blurred {
                         // Clicking the tray icon while open triggers taskbar focus
                         // loss on mouse-down; consume the matching mouse-up so the

@@ -130,7 +130,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    let result = eframe::run_native(
         APP_NAME,
         native_options,
         Box::new(move |cc| {
@@ -147,7 +147,11 @@ fn main() -> eframe::Result<()> {
                 tray_rx,
             )))
         }),
-    )
+    );
+
+    // Tear the poller down explicitly instead of leaving it to process exit.
+    rt.shutdown_background();
+    result
 }
 
 #[cfg(windows)]
