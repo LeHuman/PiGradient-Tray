@@ -439,7 +439,7 @@ impl PiGradientApp {
 
         // Push the action bar to the sheet's bottom instead of letting it float
         // directly under the form when the card is taller than the content.
-        let footer_h = 53.0;
+        let footer_h = 57.0;
         let remaining = (ui.available_height() - footer_h).max(0.0);
         let stretch = remaining;
         if remaining > 0.0 {
@@ -479,7 +479,7 @@ impl PiGradientApp {
 
         // Transparent frame: only lays out the buttons, the fill is painted.
         Frame::new()
-            .inner_margin(Margin::symmetric(12, 10))
+            .inner_margin(Margin::symmetric(12, 12))
             .show(ui, |ui| {
                 ui.allocate_ui_with_layout(
                     Vec2::new(FLYOUT_WIDTH - 24.0, 32.0),
@@ -488,7 +488,7 @@ impl PiGradientApp {
                         ui.scope(|ui| {
                             ui.style_mut().visuals.hyperlink_color = ACCENT_FOCUS_CO2;
                             ui.hyperlink_to(
-                                RichText::new(format!("v{APP_VERSION}")).size(10.5),
+                                RichText::new(format!("v{APP_VERSION}")).size(11.5),
                                 REPO_URL,
                             )
                             .on_hover_text(REPO_URL)
