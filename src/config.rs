@@ -201,8 +201,8 @@ mod tests {
     #[test]
     fn normalizes_urls_without_scheme_and_strips_trailing_slash() {
         assert_eq!(
-            normalize_gateway_url("192.168.1.50:8080/").unwrap(),
-            "http://192.168.1.50:8080"
+            normalize_gateway_url("192.0.2.10:8080/").unwrap(),
+            "http://192.0.2.10:8080"
         );
         assert_eq!(
             normalize_gateway_url("https://air.lan/").unwrap(),
