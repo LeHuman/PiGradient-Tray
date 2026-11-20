@@ -498,6 +498,40 @@ pub fn work_area_for_point(_px: i32, _py: i32) -> PhysicalRect {
     }
 }
 
+/// Effective DPI scale (`dpi / 96.0`) of the monitor containing physical
+/// `(x, y)`.
+///
+/// The parked window holds a frame laid out at the scale it was last painted
+/// with. Revealing it on a monitor with a different scale would show that
+/// frame at the wrong size, so the reveal path compares this against
+/// `pixels_per_point()` and falls back to the cloaked settle when they differ.
+#[cfg(windows)]
+pub fn monitor_dpi_scale_at(x: f32, y: f32) -> Option<f32> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+
+    unsafe {
+        let hmon = MonitorFromPoint(
+            POINT {
+                x: x as i32,
+                y: y as i32,
+            },
+            MONITOR_DEFAULTTONEAREST,
+        );
+        let (mut dpi_x, mut dpi_y) = (0u32, 0u32);
+        GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
+            .ok()
+            .filter(|()| dpi_x > 0)
+            .map(|()| dpi_x as f32 / 96.0)
+    }
+}
+
+#[cfg(not(windows))]
+pub fn monitor_dpi_scale_at(_x: f32, _y: f32) -> Option<f32> {
+    None
+}
+
 /// Computes logical `OuterPosition` for the flyout card anchored cleanly above
 /// (or beside, on vertical taskbars) the clicked tray icon and clamped strictly
 /// inside the monitor's usable work area with an 8pt safety margin.

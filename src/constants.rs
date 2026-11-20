@@ -53,13 +53,28 @@ pub const CARD_STROKE_WIDTH: f32 = 1.0;
 pub const CARD_BLEED: f32 = 1.0;
 /// Native window width = card content + border strokes + transparent bleed.
 pub const FLYOUT_OUTER_WIDTH: f32 = FLYOUT_WIDTH + 2.0 * CARD_STROKE_WIDTH + 2.0 * CARD_BLEED;
+/// Card corner radius; the settings sheet reuses it minus the stroke so its
+/// bottom arcs stay concentric with the card shell.
+pub const CARD_RADIUS: u8 = 12;
+pub const SHEET_RADIUS: u8 = CARD_RADIUS - CARD_STROKE_WIDTH as u8;
 /// Fixed KPI tile height, so cards in both rows read as matched pairs.
 pub const TILE_HEIGHT: f32 = 88.0;
 /// Where a hidden flyout is parked off every monitor so it stays mapped and warm.
 pub const PARKED_POS: Pos2 = Pos2::new(-32000.0, -32000.0);
+/// First-run card and canvas guess before anything has been measured.
 pub const FLYOUT_INITIAL_HEIGHT: f32 = 370.0;
 pub const FLYOUT_MIN_HEIGHT: f32 = 260.0;
-pub const FLYOUT_SHOW_MIN_HEIGHT: f32 = 300.0;
+/// Settings card height assumed before the form has been measured. Covers the
+/// form plus a wrapped validation line on the very first open.
+pub const SETTINGS_HEIGHT_GUESS: f32 = 400.0;
+/// Room kept in the settings card for one extra wrapped validation line, so an
+/// error never re-flows the fixed-size sheet or pushes the footer out.
+pub const SETTINGS_ERROR_HEADROOM: f32 = 18.0;
+/// Room kept in the canvas for the offline/setup banner, which can appear after
+/// the dashboard height was measured. The window region clips the leftover.
+pub const BANNER_HEADROOM: f32 = 58.0;
+/// Seconds the settings page takes to slide between views.
+pub const VIEW_ANIMATION_SECS: f32 = 0.18;
 pub const FLYOUT_SCREEN_MARGIN: f32 = 8.0;
 pub const FOCUS_LOSS_GRACE_MS: u128 = 220;
 

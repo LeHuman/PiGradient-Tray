@@ -1,13 +1,13 @@
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, RichText,
-    Role, Sense, Stroke, StrokeKind, TextStyle, Vec2, WidgetAtom, WidgetInfo,
+    self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, Rect,
+    RichText, Role, Sense, Stroke, StrokeKind, TextStyle, Vec2, WidgetAtom, WidgetInfo,
 };
 
 use crate::config::AppSettings;
 use crate::constants::{
     ACCENT_FOCUS_CO2, ACCENT_PRIMARY, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT,
-    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, SURFACE_CARD,
-    SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
+    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, SHEET_RADIUS,
+    SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
 };
 use crate::theme::{active_tint_bg, border_input, border_subtle, hover_overlay};
 
@@ -168,9 +168,23 @@ impl From<&AppSettings> for SettingsFormState {
     }
 }
 
+/// What the settings sheet reports back to the card shell.
+#[derive(Default)]
+pub(super) struct SettingsOutcome {
+    /// The page asked to return to the dashboard (Save or Cancel).
+    pub close: bool,
+    /// Height the page needs, without the stretch that pins the footer.
+    pub content_height: f32,
+}
+
 impl PiGradientApp {
-    pub(super) fn render_settings_panel(&mut self, ui: &mut egui::Ui) {
-        // Scrollable form body
+    pub(super) fn render_settings_panel(&mut self, ui: &mut egui::Ui) -> SettingsOutcome {
+        let mut out = SettingsOutcome::default();
+        let mut submit = false;
+        let mut cancel = false;
+
+        // Form body. Laid out at the sheet's fixed height, so the page never
+        // re-flows while the card animates.
         Frame::new()
             .inner_margin(Margin::symmetric(12, 12))
             .show(ui, |ui| {
@@ -211,14 +225,13 @@ impl PiGradientApp {
                         self.settings_form.error = None;
                     }
                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        self.submit_settings_form();
-                        return;
+                        submit = true;
                     }
                     if let Some(err) = &self.settings_form.error {
                         ui.label(RichText::new(err).size(11.0).color(ERROR_RED));
                     } else {
                         ui.label(
-                            RichText::new("Local LAN address only (e.g. http://192.168.1.50:8080)")
+                            RichText::new("Local LAN address only (e.g. http://192.0.2.10:9999)")
                                 .size(10.5)
                                 .color(TEXT_MUTED),
                         );
@@ -424,6 +437,15 @@ impl PiGradientApp {
                     });
             });
 
+        // Push the action bar to the sheet's bottom instead of letting it float
+        // directly under the form when the card is taller than the content.
+        let footer_h = 53.0;
+        let remaining = (ui.available_height() - footer_h).max(0.0);
+        let stretch = remaining;
+        if remaining > 0.0 {
+            ui.add_space(remaining);
+        }
+
         // Bottom footer action bar (#14171D + top hairline)
         let sep_start = ui.next_widget_position();
         ui.painter().line_segment(
@@ -434,14 +456,29 @@ impl PiGradientApp {
             Stroke::new(1.0, border_subtle()),
         );
 
+        // Footer background, anchored to the card's inner bottom rather than
+        // the translated sheet rect: while the page slides, the sheet's bottom
+        // is below the card, and a fill rounded there would have its arcs cut
+        // square by the scene clip (painting over the card's own bottom arcs).
+        let footer_bg = Rect::from_min_max(
+            sep_start,
+            Pos2::new(sep_start.x + FLYOUT_WIDTH, ui.clip_rect().max.y),
+        );
+        if footer_bg.height() > 0.0 {
+            ui.painter().rect_filled(
+                footer_bg,
+                CornerRadius {
+                    nw: 0,
+                    ne: 0,
+                    sw: SHEET_RADIUS,
+                    se: SHEET_RADIUS,
+                },
+                SURFACE_HEADER,
+            );
+        }
+
+        // Transparent frame: only lays out the buttons, the fill is painted.
         Frame::new()
-            .fill(SURFACE_HEADER)
-            .corner_radius(CornerRadius {
-                nw: 0,
-                ne: 0,
-                sw: 11,
-                se: 11,
-            })
             .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
                 ui.allocate_ui_with_layout(
@@ -459,7 +496,7 @@ impl PiGradientApp {
                         )
                         .clicked()
                         {
-                            self.submit_settings_form();
+                            submit = true;
                         }
 
                         if render_pill_button(
@@ -471,10 +508,23 @@ impl PiGradientApp {
                         )
                         .clicked()
                         {
-                            self.in_settings = false;
+                            cancel = true;
                         }
                     },
                 );
             });
+
+        // Submit last, after the footer has been laid out: returning early
+        // would report a page shorter than the one on screen, and the card
+        // would shrink mid-close.
+        if cancel {
+            out.close = true;
+        }
+        if submit {
+            out.close = self.submit_settings_form();
+        }
+
+        out.content_height = (ui.min_rect().height() - stretch).max(0.0);
+        out
     }
 }

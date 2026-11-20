@@ -5,7 +5,8 @@ use eframe::egui::{
 
 use crate::config::AppSettings;
 use crate::constants::{
-    ACCENT_FOCUS_CO2, FLYOUT_WIDTH, SURFACE_HEADER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
+    ACCENT_FOCUS_CO2, FLYOUT_WIDTH, SHEET_RADIUS, SURFACE_HEADER, TEXT_MUTED, TEXT_PRIMARY,
+    TEXT_SECONDARY,
 };
 use crate::poller::TelemetrySnapshot;
 use crate::theme::{
@@ -26,15 +27,32 @@ enum HeaderIconKind {
     Close,
 }
 
+/// What the user clicked in the header this frame.
+///
+/// The header deliberately reports intents instead of mutating the app: the
+/// view is part of the card's geometry, so flipping it mid-layout would paint
+/// the other view (and record its height) in the same frame that the page
+/// transition starts.
+#[derive(Default)]
+pub(super) struct HeaderOutcome {
+    /// Height the header occupied, chrome included.
+    pub height: f32,
+    pub hide: bool,
+    pub toggle_settings: bool,
+    pub back: bool,
+    pub pin: bool,
+    pub dashboard: bool,
+}
+
 impl PiGradientApp {
     pub(super) fn render_header(
-        &mut self,
+        &self,
         ui: &mut egui::Ui,
-        ctx: &egui::Context,
         snapshot: &TelemetrySnapshot,
         settings: &AppSettings,
         badge_color: Color32,
-    ) {
+    ) -> HeaderOutcome {
+        let mut out = HeaderOutcome::default();
         let is_live =
             snapshot.connection_state == "online" || snapshot.connection_state == "degraded";
         let status_label = if self.in_settings {
@@ -47,8 +65,8 @@ impl PiGradientApp {
         let header_resp = Frame::new()
             .fill(SURFACE_HEADER)
             .corner_radius(CornerRadius {
-                nw: 11,
-                ne: 11,
+                nw: SHEET_RADIUS,
+                ne: SHEET_RADIUS,
                 sw: 0,
                 se: 0,
             })
@@ -71,7 +89,7 @@ impl PiGradientApp {
                             )
                             .clicked()
                             {
-                                self.in_settings = false;
+                                out.back = true;
                             }
                         } else {
                             let (dot_rect, _) =
@@ -119,7 +137,7 @@ impl PiGradientApp {
                             )
                             .clicked()
                             {
-                                self.hide_flyout(ctx);
+                                out.hide = true;
                             }
 
                             if header_icon_button(
@@ -135,11 +153,7 @@ impl PiGradientApp {
                             )
                             .clicked()
                             {
-                                if self.in_settings {
-                                    self.in_settings = false;
-                                } else {
-                                    self.open_settings_view();
-                                }
+                                out.toggle_settings = true;
                             }
 
                             if !self.in_settings {
@@ -156,7 +170,7 @@ impl PiGradientApp {
                                 )
                                 .clicked()
                                 {
-                                    self.toggle_pin();
+                                    out.pin = true;
                                 }
 
                                 if header_icon_button(
@@ -173,7 +187,7 @@ impl PiGradientApp {
                                 .clicked()
                                     && has_url
                                 {
-                                    self.open_dashboard();
+                                    out.dashboard = true;
                                 }
                             }
                         });
@@ -187,6 +201,9 @@ impl PiGradientApp {
             [rect.left_bottom(), rect.right_bottom()],
             Stroke::new(1.0, border_subtle()),
         );
+
+        out.height = rect.height();
+        out
     }
 }
 

@@ -76,7 +76,7 @@ fn spawn_windows_power_listener(wake_notify: Arc<tokio::sync::Notify>) {
 
         if hwnd.is_ok() {
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).into() {
+            while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -166,6 +166,65 @@ fn hwnd_from_frame(frame: &eframe::Frame) -> Option<windows::Win32::Foundation::
     Some(HWND(win32.hwnd.get() as *mut core::ffi::c_void))
 }
 
+/// A region applied to the flyout window, cached so it is only re-applied when
+/// it actually changes.
+///
+/// Windows keeps a region in *window* coordinates and does not adjust it when
+/// the window is resized, so the size it was built for is part of the cache
+/// key: a client-size change with an unchanged card top would otherwise leave
+/// the card clipped to the old bounds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WindowRegion {
+    /// Whole window; Windows tracks the bounds across resizes on its own.
+    Full,
+    /// Clipped to the card, for a window of the recorded size.
+    Clipped { top: i32, width: i32, height: i32 },
+}
+
+/// Clip the window, including its hit-testing, to the card.
+///
+/// The session canvas leaves an empty strip above a short card. Left in the
+/// window, that strip would swallow clicks meant for whatever is behind the
+/// flyout, so the window region ends just above the card's top edge.
+///
+/// `top_px` is in window coordinates; at or above zero means "no clipping".
+#[cfg(windows)]
+pub(crate) fn set_window_region(frame: &eframe::Frame, top_px: i32) -> Option<WindowRegion> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, SetWindowRgn};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    let hwnd = hwnd_from_frame(frame)?;
+    let mut rect = RECT::default();
+    if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
+        return None;
+    }
+    let width = rect.right - rect.left;
+    let height = rect.bottom - rect.top;
+    let top = top_px.clamp(0, height);
+    if top <= 0 {
+        // Clearing the region hands bounds tracking back to Windows, which
+        // follows resizes and DPI changes by itself.
+        unsafe { SetWindowRgn(hwnd, None, true) };
+        return Some(WindowRegion::Full);
+    }
+    let rgn = unsafe { CreateRectRgn(0, top, width, height) };
+    if rgn.is_invalid() {
+        return None;
+    }
+    if unsafe { SetWindowRgn(hwnd, Some(rgn), true) } == 0 {
+        // On failure Windows does not take ownership of the region.
+        let _ = unsafe { DeleteObject(rgn.into()) };
+        return None;
+    }
+    Some(WindowRegion::Clipped { top, width, height })
+}
+
+#[cfg(not(windows))]
+pub(crate) fn set_window_region(_frame: &eframe::Frame, _top_px: i32) -> Option<WindowRegion> {
+    None
+}
+
 /// DWM draws a rectangular drop shadow plus a 1px border around every window
 /// that has frame styles, even when `decorations(false)` hides the title bar.
 /// Furthermore, `egui-winit` passes `with_undecorated_shadow(true)` on Windows
@@ -196,6 +255,17 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
     static HOOKED_HWND: AtomicIsize = AtomicIsize::new(0);
     static ORIG_WNDPROC: AtomicIsize = AtomicIsize::new(0);
 
+    // Forward to the window procedure that winit installed.
+    unsafe fn call_orig(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        let orig = ORIG_WNDPROC.load(Ordering::Acquire);
+        if orig != 0 {
+            let proc: WNDPROC = unsafe { std::mem::transmute::<isize, WNDPROC>(orig) };
+            unsafe { CallWindowProcW(proc, hwnd, msg, wparam, lparam) }
+        } else {
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
+    }
+
     unsafe extern "system" fn borderless_wnd_proc(
         hwnd: HWND,
         msg: u32,
@@ -216,13 +286,7 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
         if msg == WM_ERASEBKGND {
             return LRESULT(1);
         }
-        let orig = ORIG_WNDPROC.load(Ordering::Acquire);
-        if orig != 0 {
-            let proc: WNDPROC = unsafe { std::mem::transmute::<isize, WNDPROC>(orig) };
-            unsafe { CallWindowProcW(proc, hwnd, msg, wparam, lparam) }
-        } else {
-            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-        }
+        unsafe { call_orig(hwnd, msg, wparam, lparam) }
     }
 
     let Some(hwnd) = hwnd_from_frame(frame) else {
@@ -235,12 +299,19 @@ fn ensure_borderless_window_policy(frame: &eframe::Frame) {
         .is_ok()
     {
         unsafe {
+            // Cache the previous procedure before installing ours: a message
+            // dispatched during the install must still reach winit.
+            let prev =
+                windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
+            ORIG_WNDPROC.store(prev, Ordering::Release);
             let prev = SetWindowLongPtrW(
                 hwnd,
                 GWLP_WNDPROC,
                 borderless_wnd_proc as *const () as usize as isize,
             );
-            ORIG_WNDPROC.store(prev, Ordering::Release);
+            if prev != 0 && prev != ORIG_WNDPROC.load(Ordering::Acquire) {
+                ORIG_WNDPROC.store(prev, Ordering::Release);
+            }
 
             let disable_transitions: i32 = 1;
             let _ = DwmSetWindowAttribute(
