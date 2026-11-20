@@ -446,11 +446,7 @@ impl PiGradientApp {
 
                         ui.horizontal(|ui| {
                             ui.set_width(FLYOUT_WIDTH - 46.0);
-                            ui.label(
-                                RichText::new("Subtle UI sounds")
-                                    .size(12.0)
-                                    .color(TEXT_PRIMARY),
-                            );
+                            ui.label(RichText::new("UI sounds").size(12.0).color(TEXT_PRIMARY));
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 let cb_resp = ui.checkbox(&mut self.settings_form.ui_sounds, "");
                                 if cb_resp.hovered() {
