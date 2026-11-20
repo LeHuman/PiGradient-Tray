@@ -5,9 +5,10 @@ use eframe::egui::{
 
 use crate::config::AppSettings;
 use crate::constants::{
-    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, APP_VERSION, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT,
-    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, REPO_URL, SHEET_RADIUS,
-    SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
+    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, APP_NAME, APP_VERSION, DEFAULT_IDLE_POLL_SECONDS,
+    DEFAULT_TEMP_UNIT, DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS,
+    REPO_URL, SHEET_RADIUS, SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
+    TEXT_SECONDARY,
 };
 use crate::theme::{active_tint_bg, border_input, border_subtle, hover_overlay};
 
@@ -439,7 +440,7 @@ impl PiGradientApp {
 
         // Push the action bar to the sheet's bottom instead of letting it float
         // directly under the form when the card is taller than the content.
-        let footer_h = 57.0;
+        let footer_h = 50.0;
         let remaining = (ui.available_height() - footer_h).max(0.0);
         let stretch = remaining;
         if remaining > 0.0 {
@@ -479,21 +480,118 @@ impl PiGradientApp {
 
         // Transparent frame: only lays out the buttons, the fill is painted.
         Frame::new()
-            .inner_margin(Margin::symmetric(12, 12))
+            .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
                 ui.allocate_ui_with_layout(
-                    Vec2::new(FLYOUT_WIDTH - 24.0, 32.0),
+                    Vec2::new(FLYOUT_WIDTH - 24.0, 30.0),
                     Layout::left_to_right(Align::Center),
                     |ui| {
-                        ui.scope(|ui| {
-                            ui.style_mut().visuals.hyperlink_color = ACCENT_FOCUS_CO2;
-                            ui.hyperlink_to(
-                                RichText::new(format!("v{APP_VERSION}")).size(11.5),
-                                REPO_URL,
+                        let mut version_job = egui::text::LayoutJob::default();
+                        version_job.append(
+                            APP_NAME,
+                            0.0,
+                            egui::TextFormat {
+                                font_id: FontId::proportional(11.5),
+                                color: Color32::PLACEHOLDER,
+                                valign: Align::Center,
+                                ..Default::default()
+                            },
+                        );
+                        version_job.append(
+                            " · ",
+                            0.0,
+                            egui::TextFormat {
+                                font_id: FontId::proportional(11.0),
+                                color: TEXT_MUTED,
+                                valign: Align::Center,
+                                ..Default::default()
+                            },
+                        );
+                        version_job.append(
+                            &format!("v{APP_VERSION}"),
+                            0.0,
+                            egui::TextFormat {
+                                font_id: FontId::monospace(11.0),
+                                color: ACCENT_FOCUS_CO2,
+                                valign: Align::Center,
+                                ..Default::default()
+                            },
+                        );
+
+                        let mut badge = WidgetAtom::new(egui::WidgetText::from(version_job))
+                            .sense(Sense::click())
+                            .frame(
+                                Frame::new()
+                                    .inner_margin(Margin::symmetric(8, 3))
+                                    .corner_radius(CornerRadius::same(6)),
                             )
-                            .on_hover_text(REPO_URL)
-                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                            .min_size(Vec2::new(0.0, 24.0))
+                            .align2(Align2::CENTER_CENTER)
+                            .allocate(ui);
+
+                        let hovered = badge.response.hovered();
+                        let pressed = badge.response.is_pointer_button_down_on();
+                        let focused = badge.response.has_focus();
+
+                        if hovered {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+
+                        let (bg, stroke, fg) = if pressed {
+                            (
+                                active_tint_bg(),
+                                Stroke::new(1.0, ACCENT_FOCUS_CO2.gamma_multiply(0.75)),
+                                Color32::WHITE,
+                            )
+                        } else if hovered {
+                            (
+                                SURFACE_TILE.blend(hover_overlay()),
+                                Stroke::new(1.0, border_input()),
+                                Color32::WHITE,
+                            )
+                        } else {
+                            (
+                                SURFACE_CARD,
+                                Stroke::new(1.0, border_subtle()),
+                                TEXT_SECONDARY,
+                            )
+                        };
+
+                        badge.container.frame.fill = bg;
+                        badge.container.fallback_text_color = fg;
+                        let painted = badge.paint(ui);
+
+                        ui.painter().rect_stroke(
+                            painted.response.rect,
+                            CornerRadius::same(6),
+                            stroke,
+                            StrokeKind::Inside,
+                        );
+                        if focused {
+                            ui.painter().rect_stroke(
+                                painted.response.rect,
+                                CornerRadius::same(6),
+                                Stroke::new(1.5, ACCENT_FOCUS_CO2),
+                                StrokeKind::Inside,
+                            );
+                        }
+
+                        let link_label = format!("{APP_NAME} v{APP_VERSION}");
+                        painted.response.widget_info(|| {
+                            WidgetInfo::labeled(Role::Link, ui.is_enabled(), &link_label)
                         });
+                        if painted.response.clicked_with_open_in_background() {
+                            ui.open_url(egui::OpenUrl {
+                                url: REPO_URL.to_owned(),
+                                new_tab: true,
+                            });
+                        } else if painted.response.clicked() {
+                            ui.open_url(egui::OpenUrl {
+                                url: REPO_URL.to_owned(),
+                                new_tab: false,
+                            });
+                        }
+                        painted.response.on_hover_text("Open PiGradient repository");
 
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
@@ -501,7 +599,7 @@ impl PiGradientApp {
                             if render_pill_button(
                                 ui,
                                 RichText::new("Save").size(12.0).strong(),
-                                Vec2::new(66.0, 32.0),
+                                Vec2::new(66.0, 30.0),
                                 6,
                                 ButtonKind::Primary,
                             )
@@ -513,7 +611,7 @@ impl PiGradientApp {
                             if render_pill_button(
                                 ui,
                                 RichText::new("Cancel").size(12.0).strong(),
-                                Vec2::new(62.0, 32.0),
+                                Vec2::new(62.0, 30.0),
                                 6,
                                 ButtonKind::Ghost,
                             )
