@@ -31,7 +31,7 @@ I wanted a Windows companion app for PiGradient so that I can always check telem
 - Borderless, always-on-top flyout anchored above the notification area and clamped to the monitor work area, with no title bar and no DWM shadow.
 - KPI tiles for PM2.5/AQI, CO2, temperature/humidity and VOC/NOx using the app's threshold colours; `--` when a reading is missing.
 - One-hour CO2/PM2.5 sparkline with a hover crosshair and per-point readout.
-- Settings for gateway URL, °F/°C, idle poll interval (15-120 s), pinning the flyout, launch at Windows startup and tray icon style.
+- Settings for gateway URL, °F/°C, idle poll interval (15-120 s), pinning the flyout, launch at Windows startup, tray icon style and UI sounds.
 - Polling: `/api/v1/widget` while idle (default 30 s); `/api/v1/stream` SSE at 1 Hz plus `/api/v1/history` (1 h window, 60 s buckets) while the flyout is visible; refresh on resume from sleep.
 - Single-instance lock; settings persisted to `%APPDATA%\PiGradient\settings.json`.
 
@@ -55,6 +55,18 @@ cargo build --release
 .\target\release\pigradient-tray.exe
 ```
 
+`cargo install` only puts the binary on `PATH`, which Windows Search does not index as an app. To make it appear in Start menu search, create a shortcut once:
+
+```powershell
+$exe = "$env:USERPROFILE\.cargo\bin\pigradient-tray.exe"
+$lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\PiGradient Tray.lnk"
+$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+$s.TargetPath = $exe
+$s.WorkingDirectory = Split-Path $exe
+$s.IconLocation = "$exe,0"
+$s.Save()
+```
+
 ## Usage
 
 1. Start `pigradient-tray`; it appears in the notification area and does not add a taskbar button.
@@ -74,6 +86,7 @@ cargo build --release
 | `pinFlyout` | Keep the flyout open when it loses focus |
 | `launchAtStartup` | Adds or removes the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry |
 | `trayIconStyle` | `ring` or `aqi` |
+| `uiSounds` | Synthesized ticks for flyout and control interactions (default `true`) |
 
 ## Development
 
