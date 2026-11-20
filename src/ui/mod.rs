@@ -21,6 +21,7 @@ use crate::constants::{
     SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, VIEW_ANIMATION_SECS,
 };
 use crate::poller::{SharedAppState, TelemetrySnapshot};
+use crate::sound::UiSound;
 use crate::theme::{self, border_card, border_subtle, format_relative_time, parse_color32};
 use crate::tray::{
     TrayAction, TrayController, compute_flyout_logical_pos, monitor_dpi_scale_at,
@@ -303,10 +304,12 @@ impl PiGradientApp {
             )));
             self.reveal_phase = RevealPhase::Settling;
         }
+        self.play_ui_sound(UiSound::Open);
         ctx.request_repaint();
     }
 
     pub(super) fn hide_flyout(&mut self, ctx: &egui::Context) {
+        let was_visible = self.visible;
         self.visible = false;
         self.reveal_phase = RevealPhase::Hidden;
         self.shown_at = None;
@@ -326,6 +329,9 @@ impl PiGradientApp {
         }
         self.state.set_flyout_visible(false);
         self.park_window(ctx);
+        if was_visible {
+            self.play_ui_sound(UiSound::Close);
+        }
         ctx.request_repaint();
     }
 
@@ -356,6 +362,13 @@ impl PiGradientApp {
         let trimmed = url.trim();
         if !trimmed.is_empty() {
             let _ = open::that(trimmed);
+        }
+    }
+
+    /// Plays one of the synthesized UI ticks, unless the user turned them off.
+    pub(super) fn play_ui_sound(&self, sound: UiSound) {
+        if self.state.read_settings().ui_sounds {
+            crate::sound::play(sound);
         }
     }
 
@@ -418,6 +431,7 @@ impl PiGradientApp {
             let mut guard = self.state.write_settings();
             *guard = current;
         }
+        self.play_ui_sound(UiSound::Toggle);
     }
 
     /// Saves the form. Returns whether the page may close; a validation or
@@ -437,10 +451,12 @@ impl PiGradientApp {
                     pin_flyout: current.pin_flyout,
                     launch_at_startup: self.settings_form.launch_at_startup,
                     tray_icon_style: self.settings_form.tray_icon_style.clone(),
+                    ui_sounds: self.settings_form.ui_sounds,
                 };
                 match self.persist_and_apply_settings(next) {
                     Ok(()) => {
                         self.settings_form.error = None;
+                        self.play_ui_sound(UiSound::Action);
                         true
                     }
                     Err(e) => {
@@ -612,6 +628,7 @@ impl PiGradientApp {
                         .clicked()
                         {
                             self.open_settings_view();
+                            self.play_ui_sound(UiSound::Open);
                         }
                     });
                 });
@@ -679,6 +696,7 @@ impl PiGradientApp {
                         .clicked()
                         {
                             self.state.trigger_refresh();
+                            self.play_ui_sound(UiSound::Action);
                         }
                     });
                 });
@@ -1158,13 +1176,16 @@ impl eframe::App for PiGradientApp {
         }
         if head.back {
             self.in_settings = false;
+            self.play_ui_sound(UiSound::Close);
             ctx.request_repaint();
         }
         if head.toggle_settings {
             if self.in_settings {
                 self.in_settings = false;
+                self.play_ui_sound(UiSound::Close);
             } else {
                 self.open_settings_view();
+                self.play_ui_sound(UiSound::Open);
             }
             ctx.request_repaint();
         }
@@ -1173,6 +1194,7 @@ impl eframe::App for PiGradientApp {
         }
         if head.dashboard {
             self.open_dashboard();
+            self.play_ui_sound(UiSound::Action);
         }
     }
 }

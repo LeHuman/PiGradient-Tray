@@ -68,7 +68,7 @@ pub const FLYOUT_INITIAL_HEIGHT: f32 = 370.0;
 pub const FLYOUT_MIN_HEIGHT: f32 = 260.0;
 /// Settings card height assumed before the form has been measured. Covers the
 /// form plus a wrapped validation line on the very first open.
-pub const SETTINGS_HEIGHT_GUESS: f32 = 400.0;
+pub const SETTINGS_HEIGHT_GUESS: f32 = 440.0;
 /// Room kept in the settings card for one extra wrapped validation line, so an
 /// error never re-flows the fixed-size sheet or pushes the footer out.
 pub const SETTINGS_ERROR_HEADROOM: f32 = 18.0;

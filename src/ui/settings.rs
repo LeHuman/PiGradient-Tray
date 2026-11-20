@@ -10,6 +10,7 @@ use crate::constants::{
     REPO_URL, SHEET_RADIUS, SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY,
     TEXT_SECONDARY,
 };
+use crate::sound::UiSound;
 use crate::theme::{active_tint_bg, border_input, border_subtle, hover_overlay};
 
 use super::PiGradientApp;
@@ -141,6 +142,7 @@ pub(crate) struct SettingsFormState {
     pub idle_poll_seconds: u64,
     pub tray_icon_style: String,
     pub launch_at_startup: bool,
+    pub ui_sounds: bool,
     pub error: Option<String>,
 }
 
@@ -164,6 +166,7 @@ impl From<&AppSettings> for SettingsFormState {
                 DEFAULT_TRAY_ICON_STYLE.to_string()
             },
             launch_at_startup: s.launch_at_startup,
+            ui_sounds: s.ui_sounds,
             error: None,
         }
     }
@@ -277,6 +280,7 @@ impl PiGradientApp {
                                             .clicked()
                                             {
                                                 self.settings_form.temp_unit = code.to_string();
+                                                self.play_ui_sound(UiSound::Toggle);
                                             }
                                         }
                                     });
@@ -413,6 +417,7 @@ impl PiGradientApp {
                                                 {
                                                     self.settings_form.tray_icon_style =
                                                         id.to_string();
+                                                    self.play_ui_sound(UiSound::Toggle);
                                                 }
                                             }
                                         });
@@ -430,6 +435,24 @@ impl PiGradientApp {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 let cb_resp =
                                     ui.checkbox(&mut self.settings_form.launch_at_startup, "");
+                                if cb_resp.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                if cb_resp.changed() {
+                                    self.play_ui_sound(UiSound::Toggle);
+                                }
+                            });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.set_width(FLYOUT_WIDTH - 46.0);
+                            ui.label(
+                                RichText::new("Subtle UI sounds")
+                                    .size(12.0)
+                                    .color(TEXT_PRIMARY),
+                            );
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let cb_resp = ui.checkbox(&mut self.settings_form.ui_sounds, "");
                                 if cb_resp.hovered() {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
@@ -628,6 +651,7 @@ impl PiGradientApp {
         // would report a page shorter than the one on screen, and the card
         // would shrink mid-close.
         if cancel {
+            self.play_ui_sound(UiSound::Close);
             out.close = true;
         }
         if submit {

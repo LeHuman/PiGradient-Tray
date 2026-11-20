@@ -3,6 +3,7 @@
 mod config;
 mod constants;
 mod poller;
+mod sound;
 mod theme;
 mod tray;
 mod ui;

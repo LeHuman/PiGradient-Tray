@@ -19,6 +19,10 @@ fn default_idle_poll() -> u64 {
     DEFAULT_IDLE_POLL_SECONDS
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -34,6 +38,9 @@ pub struct AppSettings {
     pub launch_at_startup: bool,
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: String, // "ring" | "aqi"
+    /// Subtle synthesized ticks for flyout and control interactions.
+    #[serde(default = "default_true")]
+    pub ui_sounds: bool,
 }
 
 impl Default for AppSettings {
@@ -45,6 +52,7 @@ impl Default for AppSettings {
             pin_flyout: false,
             launch_at_startup: false,
             tray_icon_style: default_tray_icon_style(),
+            ui_sounds: true,
         }
     }
 }
