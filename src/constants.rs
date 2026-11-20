@@ -5,6 +5,8 @@ use eframe::egui::{Color32, Pos2};
 // -----------------------------------------------------------------------------
 
 pub const APP_NAME: &str = "PiGradient";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 pub const SINGLE_INSTANCE_ID: &str = concat!(env!("CARGO_PKG_NAME"), "-single-instance");
 pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 pub const CONFIG_DIR_NAME: &str = "PiGradient";

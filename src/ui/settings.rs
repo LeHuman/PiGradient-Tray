@@ -5,8 +5,8 @@ use eframe::egui::{
 
 use crate::config::AppSettings;
 use crate::constants::{
-    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT,
-    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, SHEET_RADIUS,
+    ACCENT_FOCUS_CO2, ACCENT_PRIMARY, APP_VERSION, DEFAULT_IDLE_POLL_SECONDS, DEFAULT_TEMP_UNIT,
+    DEFAULT_TRAY_ICON_STYLE, ERROR_RED, FLYOUT_WIDTH, IDLE_POLL_PRESETS, REPO_URL, SHEET_RADIUS,
     SURFACE_CARD, SURFACE_HEADER, SURFACE_TILE, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
 };
 use crate::theme::{active_tint_bg, border_input, border_subtle, hover_overlay};
@@ -483,33 +483,45 @@ impl PiGradientApp {
             .show(ui, |ui| {
                 ui.allocate_ui_with_layout(
                     Vec2::new(FLYOUT_WIDTH - 24.0, 32.0),
-                    Layout::right_to_left(Align::Center),
+                    Layout::left_to_right(Align::Center),
                     |ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                        ui.scope(|ui| {
+                            ui.style_mut().visuals.hyperlink_color = ACCENT_FOCUS_CO2;
+                            ui.hyperlink_to(
+                                RichText::new(format!("v{APP_VERSION}")).size(10.5),
+                                REPO_URL,
+                            )
+                            .on_hover_text(REPO_URL)
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                        });
 
-                        if render_pill_button(
-                            ui,
-                            RichText::new("Save").size(12.0).strong(),
-                            Vec2::new(66.0, 32.0),
-                            6,
-                            ButtonKind::Primary,
-                        )
-                        .clicked()
-                        {
-                            submit = true;
-                        }
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-                        if render_pill_button(
-                            ui,
-                            RichText::new("Cancel").size(12.0).strong(),
-                            Vec2::new(62.0, 32.0),
-                            6,
-                            ButtonKind::Ghost,
-                        )
-                        .clicked()
-                        {
-                            cancel = true;
-                        }
+                            if render_pill_button(
+                                ui,
+                                RichText::new("Save").size(12.0).strong(),
+                                Vec2::new(66.0, 32.0),
+                                6,
+                                ButtonKind::Primary,
+                            )
+                            .clicked()
+                            {
+                                submit = true;
+                            }
+
+                            if render_pill_button(
+                                ui,
+                                RichText::new("Cancel").size(12.0).strong(),
+                                Vec2::new(62.0, 32.0),
+                                6,
+                                ButtonKind::Ghost,
+                            )
+                            .clicked()
+                            {
+                                cancel = true;
+                            }
+                        });
                     },
                 );
             });
